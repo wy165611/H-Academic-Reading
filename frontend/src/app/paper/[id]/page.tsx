@@ -1353,6 +1353,10 @@ export default function PaperReaderPage() {
                   );
 
                   if (blk.type === "heading") {
+                    const isDuplicateHeadingZh =
+                      langMode === "bilingual" &&
+                      Boolean(blk.en && blk.zh) &&
+                      blk.en.replace(/\s+/g, "") === blk.zh.replace(/\s+/g, "");
                     const sizeCls =
                       blk.heading_level === 1
                         ? "text-[26px] md:text-[30px] mt-10 pt-6 border-t border-[#1c1c1c]/15"
@@ -1372,7 +1376,7 @@ export default function PaperReaderPage() {
                             <MathText text={blk.en} disableInteractiveTokens />
                           </h3>
                         )}
-                        {langMode !== "en" && blk.zh && (
+                        {langMode !== "en" && blk.zh && !isDuplicateHeadingZh && (
                           <h3 className="font-serif font-normal leading-[1.3] text-[#1c1c1c]/85">
                             <MathText text={blk.zh} disableInteractiveTokens />
                           </h3>
@@ -1535,6 +1539,7 @@ export default function PaperReaderPage() {
                   onClick={() => {
                     setAskSubMode((v) => !v);
                     setHighlightSubMode(false);
+                    setInlineTranslateResult(null);
                   }}
                   className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors flex items-center gap-1"
                 >
@@ -1543,7 +1548,11 @@ export default function PaperReaderPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleInlineTranslate}
+                  onClick={() => {
+                    setAskSubMode(false);
+                    setHighlightSubMode(false);
+                    handleInlineTranslate();
+                  }}
                   className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors flex items-center gap-1"
                 >
                   <Languages className="w-3.5 h-3.5" />
@@ -1554,6 +1563,7 @@ export default function PaperReaderPage() {
                   onClick={() => {
                     setHighlightSubMode((v) => !v);
                     setAskSubMode(false);
+                    setInlineTranslateResult(null);
                   }}
                   className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors"
                 >
