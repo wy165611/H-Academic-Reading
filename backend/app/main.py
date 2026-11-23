@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.config import settings
 from app.database import Base, SessionLocal, engine
@@ -21,6 +22,21 @@ from app.services.pdf_worker import start_worker, stop_worker
 async def lifespan(_app: FastAPI):
     settings.ensure_dirs()
     Base.metadata.create_all(bind=engine)
+    # Idempotent lightweight migration for existing PostgreSQL deployments
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "ALTER TABLE papers ADD COLUMN IF NOT EXISTS reading_progress DOUBLE PRECISION NOT NULL DEFAULT 0"
+            )
+        )
+        conn.execute(
+            text("ALTER TABLE papers ADD COLUMN IF NOT EXISTS last_block_id VARCHAR(64)")
+        )
+        conn.execute(
+            text(
+                "ALTER TABLE papers ADD COLUMN IF NOT EXISTS last_page INTEGER NOT NULL DEFAULT 1"
+            )
+        )
     db = SessionLocal()
     try:
         get_or_create_settings(db)

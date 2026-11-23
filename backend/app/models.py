@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -91,6 +92,10 @@ class Paper(Base):
 
     outline = Column(JSON, nullable=False, default=list)
     references_list = Column(JSON, nullable=False, default=list)
+
+    reading_progress = Column(Float, nullable=False, default=0.0)
+    last_block_id = Column(String(64), nullable=True)
+    last_page = Column(Integer, nullable=False, default=1)
 
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

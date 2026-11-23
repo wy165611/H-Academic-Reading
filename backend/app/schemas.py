@@ -124,8 +124,17 @@ class PaperOut(BaseModel):
     pdf_url: str
     thumbnail_url: Optional[str] = None
     source_url: Optional[str] = None
+    reading_progress: float = 0.0
+    last_block_id: Optional[str] = None
+    last_page: int = 1
     created_at: datetime
     updated_at: datetime
+
+
+class ReadingProgressUpdate(BaseModel):
+    reading_progress: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    last_block_id: Optional[str] = None
+    last_page: Optional[int] = Field(default=None, ge=1)
 
 
 class PaperBlockOut(BaseModel):

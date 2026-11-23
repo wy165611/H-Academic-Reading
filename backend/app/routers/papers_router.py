@@ -43,6 +43,9 @@ def paper_to_out(p: Paper) -> PaperOut:
         pdf_url=f"/api/files/pdfs/{p.pdf_filename}",
         thumbnail_url=p.thumbnail_url,
         source_url=p.source_url,
+        reading_progress=float(p.reading_progress or 0.0),
+        last_block_id=p.last_block_id,
+        last_page=int(p.last_page or 1),
         created_at=p.created_at,
         updated_at=p.updated_at,
     )

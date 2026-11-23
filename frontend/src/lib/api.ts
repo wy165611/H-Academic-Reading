@@ -40,6 +40,9 @@ export interface PaperItem {
   pdf_url: string;
   thumbnail_url: string | null;
   source_url: string | null;
+  reading_progress?: number;
+  last_block_id?: string | null;
+  last_page?: number;
   created_at: string;
   updated_at: string;
 }

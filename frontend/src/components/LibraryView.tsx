@@ -885,7 +885,9 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
                           }
                         >
                           {p.status === "ready"
-                            ? "已就绪 · 点击精读"
+                            ? p.reading_progress && p.reading_progress >= 2
+                              ? `已读 ${Math.round(p.reading_progress)}% · 继续上次阅读`
+                              : "已就绪 · 点击精读"
                             : `${p.progress}% · ${p.progress_message}`}
                         </span>
                         {p.status === "failed" && (

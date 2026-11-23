@@ -26,6 +26,7 @@ import {
 import {
   apiFetch,
   ChatMessageItem,
+  getStoredToken,
   HIGHLIGHT_PALETTE,
   HighlightColor,
   HighlightItem,
@@ -162,6 +163,13 @@ export default function PaperReaderPage() {
   const streamScrollRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const [flashBlockId, setFlashBlockId] = useState<string | null>(null);
+  const hasRestoredPosRef = useRef<boolean>(false);
+  const latestPosRef = useRef<{
+    reading_progress: number;
+    last_block_id: string | null;
+    last_page: number;
+  }>({ reading_progress: 0, last_block_id: null, last_page: 1 });
+  const [resumeToast, setResumeToast] = useState<string | null>(null);
 
   const loadReaderData = useCallback(async () => {
     if (!paperId) return;
@@ -188,20 +196,132 @@ export default function PaperReaderPage() {
     return () => clearInterval(t);
   }, [data?.paper, loadReaderData]);
 
-  // Scroll reading progress tracker
+  // Save reading position to cloud (supports keepalive on tab close/background)
+  const flushReadingProgress = useCallback(
+    (keepalive = false) => {
+      if (!paperId) return;
+      const payload = latestPosRef.current;
+      if (payload.reading_progress <= 0 && !payload.last_block_id && payload.last_page <= 1) {
+        return;
+      }
+      const token = getStoredToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      fetch(`/api/papers/${paperId}/reading-progress`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload),
+        credentials: "include",
+        keepalive,
+      }).catch(() => {});
+    },
+    [paperId]
+  );
+
+  // Restore last reading position once when paper blocks finish loading
   useEffect(() => {
+    if (!data?.paper || hasRestoredPosRef.current) return;
+    if (viewMode !== "stream" || data.blocks.length === 0) return;
+
+    hasRestoredPosRef.current = true;
+    const savedBlockId = data.paper.last_block_id || null;
+    const savedProgress = Number(data.paper.reading_progress || 0);
+    const savedPage = Number(data.paper.last_page || 1);
+    latestPosRef.current = {
+      reading_progress: savedProgress,
+      last_block_id: savedBlockId,
+      last_page: savedPage,
+    };
+
+    if (!savedBlockId && savedProgress < 2) return;
+
+    const timer = setTimeout(() => {
+      if (savedBlockId) {
+        const el = document.getElementById(`block-${savedBlockId}`);
+        if (el) {
+          const top = el.getBoundingClientRect().top + window.scrollY - 84;
+          window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+          setFlashBlockId(savedBlockId);
+          setTimeout(() => setFlashBlockId(null), 1600);
+          setResumeToast(
+            savedProgress >= 1
+              ? `已自动定位至上次阅读位置 (${Math.round(savedProgress)}%)`
+              : "已自动定位至上次阅读位置"
+          );
+          setTimeout(() => setResumeToast(null), 4500);
+          return;
+        }
+      }
+      if (savedProgress >= 2) {
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        if (max > 0) {
+          window.scrollTo({ top: Math.round((savedProgress / 100) * max), behavior: "auto" });
+          setResumeToast(`已自动定位至上次阅读位置 (${Math.round(savedProgress)}%)`);
+          setTimeout(() => setResumeToast(null), 4500);
+        }
+      }
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [data?.paper, data?.blocks.length, viewMode]);
+
+  // Scroll reading progress tracker + debounced cloud persistence
+  useEffect(() => {
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
     const onScroll = () => {
       const doc = document.documentElement;
       const max = doc.scrollHeight - window.innerHeight;
-      if (max <= 0) {
-        setReadingProgress(100);
-        return;
+      const pct = max <= 0 ? 100 : Math.min(100, Math.max(0, Math.round((window.scrollY / max) * 100)));
+      setReadingProgress(pct);
+
+      if (viewMode === "stream" && data?.blocks && data.blocks.length > 0) {
+        // Find the first visible block near top of reading viewport (below 56px sticky header)
+        let currentBlockId: string | null = latestPosRef.current.last_block_id;
+        let currentPage = latestPosRef.current.last_page;
+        for (const blk of data.blocks) {
+          const el = document.getElementById(`block-${blk.id}`);
+          if (!el) continue;
+          const rect = el.getBoundingClientRect();
+          if (rect.bottom >= 96) {
+            currentBlockId = blk.id;
+            currentPage = blk.page_num || 1;
+            break;
+          }
+        }
+        latestPosRef.current = {
+          reading_progress: pct,
+          last_block_id: currentBlockId,
+          last_page: currentPage,
+        };
+
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+          flushReadingProgress(false);
+        }, 1000);
       }
-      setReadingProgress(Math.min(100, Math.max(0, Math.round((window.scrollY / max) * 100))));
     };
+
+    const onVisChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushReadingProgress(true);
+      }
+    };
+    const onBeforeUnload = () => {
+      flushReadingProgress(true);
+    };
+
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    document.addEventListener("visibilitychange", onVisChange);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      if (saveTimer) clearTimeout(saveTimer);
+      window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("visibilitychange", onVisChange);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      flushReadingProgress(true);
+    };
+  }, [viewMode, data?.blocks, flushReadingProgress]);
 
   // Scroll chat to bottom when messages update
   useEffect(() => {
@@ -1318,8 +1438,46 @@ export default function PaperReaderPage() {
             </div>
           )}
 
+          {resumeToast && (
+            <div className="fixed left-1/2 -translate-x-1/2 top-16 z-40 bg-[#1c1c1c] text-[#f9f8f6] px-4 py-2 text-[12px] flex items-center gap-3 border border-[#1c1c1c]">
+              <span>{resumeToast}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                  setResumeToast(null);
+                }}
+                className="underline text-[#f9f8f6]/80 hover:text-[#f9f8f6]"
+              >
+                回到顶部
+              </button>
+              <button
+                type="button"
+                onClick={() => setResumeToast(null)}
+                aria-label="关闭提示"
+                className="opacity-70 hover:opacity-100"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {viewMode === "pdf" ? (
-            <PdfOriginalViewer pdfUrl={paper.pdf_url} />
+            <PdfOriginalViewer
+              pdfUrl={paper.pdf_url}
+              initialPage={paper.last_page || 1}
+              onPageChange={(pageNum) => {
+                latestPosRef.current = {
+                  ...latestPosRef.current,
+                  last_page: pageNum,
+                  reading_progress:
+                    paper.page_count > 0
+                      ? Math.round((pageNum / paper.page_count) * 100)
+                      : latestPosRef.current.reading_progress,
+                };
+                flushReadingProgress(false);
+              }}
+            />
           ) : (
             <article
               style={{ maxWidth: `${contentWidth}px` }}

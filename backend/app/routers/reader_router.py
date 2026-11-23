@@ -26,6 +26,7 @@ from app.schemas import (
     PaperBlockOut,
     PaperDetailOut,
     QAAnchorOut,
+    ReadingProgressUpdate,
     SynthesisRequest,
     ThreadMessageCreateRequest,
 )
@@ -195,6 +196,31 @@ def get_paper_reader_data(
         paper_thread_id=paper_thread.id,
         paper_messages=[_msg_to_out(m) for m in paper_messages],
     )
+
+
+@router.put("/papers/{paper_id}/reading-progress")
+def update_reading_progress(
+    paper_id: str,
+    payload: ReadingProgressUpdate,
+    _user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    if payload.reading_progress is not None:
+        paper.reading_progress = round(float(payload.reading_progress), 1)
+    if payload.last_block_id is not None:
+        paper.last_block_id = payload.last_block_id
+    if payload.last_page is not None:
+        paper.last_page = int(payload.last_page)
+    db.commit()
+    return {
+        "ok": True,
+        "reading_progress": paper.reading_progress,
+        "last_block_id": paper.last_block_id,
+        "last_page": paper.last_page,
+    }
 
 
 @router.post("/papers/{paper_id}/translate-selection")

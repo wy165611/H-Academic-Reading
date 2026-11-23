@@ -12,15 +12,27 @@ pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 interface PdfOriginalViewerProps {
   pdfUrl: string;
+  initialPage?: number;
+  onPageChange?: (page: number) => void;
 }
 
-export default function PdfOriginalViewer({ pdfUrl }: PdfOriginalViewerProps) {
+export default function PdfOriginalViewer({
+  pdfUrl,
+  initialPage = 1,
+  onPageChange,
+}: PdfOriginalViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
-  const [pageNumber, setPageNumber] = useState<number>(1);
+  const [pageNumber, setPageNumber] = useState<number>(Math.max(1, initialPage));
   const [scale, setScale] = useState<number>(1.15);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const authedUrl = withAuthTokenUrl(pdfUrl);
+
+  const goPage = (nextPage: number) => {
+    const clamped = Math.max(1, numPages > 0 ? Math.min(numPages, nextPage) : nextPage);
+    setPageNumber(clamped);
+    onPageChange?.(clamped);
+  };
 
   return (
     <div className="w-full flex flex-col items-center">
@@ -30,7 +42,7 @@ export default function PdfOriginalViewer({ pdfUrl }: PdfOriginalViewerProps) {
           <button
             type="button"
             disabled={pageNumber <= 1}
-            onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
+            onClick={() => goPage(pageNumber - 1)}
             aria-label="上一页"
             className="p-1.5 border border-[#1c1c1c]/20 disabled:opacity-35 hover:bg-[#1c1c1c] hover:text-[#f9f8f6] transition-colors"
           >
@@ -42,7 +54,7 @@ export default function PdfOriginalViewer({ pdfUrl }: PdfOriginalViewerProps) {
           <button
             type="button"
             disabled={numPages > 0 && pageNumber >= numPages}
-            onClick={() => setPageNumber((p) => Math.min(numPages || p + 1, p + 1))}
+            onClick={() => goPage(pageNumber + 1)}
             aria-label="下一页"
             className="p-1.5 border border-[#1c1c1c]/20 disabled:opacity-35 hover:bg-[#1c1c1c] hover:text-[#f9f8f6] transition-colors"
           >
