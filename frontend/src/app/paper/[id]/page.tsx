@@ -220,8 +220,14 @@ export default function PaperReaderPage() {
   }, []);
 
   // Handle text selection inside paragraph blocks
-  const handleStreamMouseUp = useCallback(() => {
-    setTimeout(() => {
+  const handleStreamMouseUp = useCallback(
+    (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement | null;
+      // Never re-run selection handler when clicking inside floating toolbar / translation card / popovers
+      if (target?.closest("[data-floating-ui='true']")) {
+        return;
+      }
+      setTimeout(() => {
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || !sel.rangeCount) {
         return;
@@ -1510,6 +1516,8 @@ export default function PaperReaderPage() {
           {selection && (
             <div
               data-floating-ui="true"
+              onMouseUp={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
               style={{ top: `${selection.rectTop}px`, left: `${selection.rectLeft}px` }}
               className="absolute z-40 bg-[#1c1c1c] text-[#f9f8f6] border border-[#1c1c1c] px-1.5 py-1 flex flex-col gap-2 w-max max-w-[340px]"
             >
@@ -1626,6 +1634,8 @@ export default function PaperReaderPage() {
           {selection && inlineTranslateResult && (
             <div
               data-floating-ui="true"
+              onMouseUp={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
               style={{
                 top: `${selection.rectBottom}px`,
                 left: `${selection.rectLeft}px`,
