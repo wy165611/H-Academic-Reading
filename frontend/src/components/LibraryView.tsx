@@ -126,6 +126,21 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
     fetchAll();
   }, [fetchAll]);
 
+  // Auto-sync across Desktop & iPhone/iPad PWA whenever the tab/app regains focus
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetchAll();
+      }
+    };
+    window.addEventListener("focus", fetchAll);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", fetchAll);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [fetchAll]);
+
   // Poll every 3s while any paper is queued or processing
   const hasActiveJobs = useMemo(
     () => papers.some((p) => p.status === "queued" || p.status === "processing"),

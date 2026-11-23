@@ -102,17 +102,16 @@ def clean_and_parse_json(raw_text: str) -> Any:
     if not candidates:
         raise ValueError("No JSON object or array found in model response")
     start_idx = min(candidates)
-    open_char = cleaned[start_idx]
-    close_char = "}" if open_char == "{" else "]"
-    end_idx = cleaned.rfind(close_char)
-    if end_idx > start_idx:
-        cleaned = cleaned[start_idx : end_idx + 1]
 
+    decoder = json.JSONDecoder()
+    # Use raw_decode so trailing commentary or extra JSON objects never raise "Extra data"
     try:
-        return json.loads(cleaned)
+        obj, _end = decoder.raw_decode(cleaned, start_idx)
+        return obj
     except json.JSONDecodeError:
-        fixed = _escape_invalid_json_backslashes(cleaned)
-        return json.loads(fixed)
+        fixed = _escape_invalid_json_backslashes(cleaned[start_idx:])
+        obj, _end = decoder.raw_decode(fixed, 0)
+        return obj
 
 
 class LLMServiceError(RuntimeError):

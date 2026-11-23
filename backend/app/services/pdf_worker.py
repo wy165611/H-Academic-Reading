@@ -631,17 +631,30 @@ async def _translate_blocks_concurrently(
                 f"【待翻译段落列表】:\n{json.dumps(items_payload, ensure_ascii=False)}"
             )
 
-            content, _ = await call_chat_completion(
-                translate_cfg,
-                [
-                    {"role": "system", "content": "You output strictly valid JSON only."},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.2,
-                max_tokens=4096,
-                timeout_sec=120.0,
-            )
-            parsed = clean_and_parse_json(content)
+            parsed: Any = {}
+            for parse_attempt in range(2):
+                content, _ = await call_chat_completion(
+                    translate_cfg,
+                    [
+                        {"role": "system", "content": "You output strictly valid JSON only."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.2 if parse_attempt == 0 else 0.0,
+                    max_tokens=4096,
+                    timeout_sec=120.0,
+                )
+                try:
+                    parsed = clean_and_parse_json(content)
+                    break
+                except (ValueError, json.JSONDecodeError) as exc:
+                    logger.warning(
+                        "Translate batch JSON parse failed (attempt %d/2): %s",
+                        parse_attempt + 1,
+                        exc,
+                    )
+                    if parse_attempt == 1:
+                        parsed = {}
+
             trans_map = parsed.get("translations") if isinstance(parsed, dict) else {}
             if not isinstance(trans_map, dict):
                 trans_map = parsed if isinstance(parsed, dict) else {}
