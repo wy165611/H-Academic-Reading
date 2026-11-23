@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BookOpen,
+  ChevronDown,
   FileText,
   Folder as FolderIcon,
   FolderPlus,
@@ -615,7 +616,7 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -627,78 +628,87 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
                   );
                   setAddModalOpen(true);
                 }}
-                className="btn-editorial py-2.5 px-5"
+                className="btn-editorial h-9 py-0 px-4 text-[12px] tracking-[0.14em]"
               >
                 <Plus className="w-3.5 h-3.5" />
                 添加文章
               </button>
 
               {/* Filter Tier & Status */}
-              <select
-                aria-label="按期刊分区筛选"
-                value={filterTier}
-                onChange={(e) => setFilterTier(e.target.value)}
-                className="bg-[#f9f8f6] border border-[#1c1c1c]/25 px-3 py-2 text-[12px] text-[#1c1c1c]"
-              >
-                <option value="all">全部分区</option>
-                <option value="中科院1区">中科院1区</option>
-                <option value="JCR Q1">JCR Q1</option>
-                <option value="CCF-A">CCF-A</option>
-                <option value="arXiv">arXiv</option>
-              </select>
+              <div className="relative inline-flex items-center">
+                <select
+                  aria-label="按期刊分区筛选"
+                  value={filterTier}
+                  onChange={(e) => setFilterTier(e.target.value)}
+                  className="appearance-none bg-[#f9f8f6] border border-[#1c1c1c]/25 hover:border-[#1c1c1c]/50 focus:border-[#1c1c1c] focus:outline-none h-9 pl-3 pr-8 text-[12px] text-[#1c1c1c] cursor-pointer transition-colors"
+                >
+                  <option value="all">全部分区</option>
+                  <option value="中科院1区">中科院1区</option>
+                  <option value="JCR Q1">JCR Q1</option>
+                  <option value="CCF-A">CCF-A</option>
+                  <option value="arXiv">arXiv</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-[#6b7280] pointer-events-none absolute right-2.5" />
+              </div>
 
-              <select
-                aria-label="按解析状态筛选"
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="bg-[#f9f8f6] border border-[#1c1c1c]/25 px-3 py-2 text-[12px] text-[#1c1c1c]"
-              >
-                <option value="all">全部状态</option>
-                <option value="ready">已就绪</option>
-                <option value="processing">解析中</option>
-                <option value="failed">解析失败</option>
-              </select>
+              <div className="relative inline-flex items-center">
+                <select
+                  aria-label="按解析状态筛选"
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="appearance-none bg-[#f9f8f6] border border-[#1c1c1c]/25 hover:border-[#1c1c1c]/50 focus:border-[#1c1c1c] focus:outline-none h-9 pl-3 pr-8 text-[12px] text-[#1c1c1c] cursor-pointer transition-colors"
+                >
+                  <option value="all">全部状态</option>
+                  <option value="ready">已就绪</option>
+                  <option value="processing">解析中</option>
+                  <option value="failed">解析失败</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-[#6b7280] pointer-events-none absolute right-2.5" />
+              </div>
 
-              <select
-                aria-label="排序方式"
-                value={sortBy}
-                onChange={(e) =>
-                  setSortBy(e.target.value as "created_at" | "year" | "title")
-                }
-                className="bg-[#f9f8f6] border border-[#1c1c1c]/25 px-3 py-2 text-[12px] text-[#1c1c1c]"
-              >
-                <option value="created_at">按添加时间</option>
-                <option value="year">按发表年份</option>
-                <option value="title">按标题排序</option>
-              </select>
+              <div className="relative inline-flex items-center">
+                <select
+                  aria-label="排序方式"
+                  value={sortBy}
+                  onChange={(e) =>
+                    setSortBy(e.target.value as "created_at" | "year" | "title")
+                  }
+                  className="appearance-none bg-[#f9f8f6] border border-[#1c1c1c]/25 hover:border-[#1c1c1c]/50 focus:border-[#1c1c1c] focus:outline-none h-9 pl-3 pr-8 text-[12px] text-[#1c1c1c] cursor-pointer transition-colors"
+                >
+                  <option value="created_at">按添加时间</option>
+                  <option value="year">按发表年份</option>
+                  <option value="title">按标题排序</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-[#6b7280] pointer-events-none absolute right-2.5" />
+              </div>
 
-              <div className="flex border border-[#1c1c1c]/25">
+              <div className="inline-flex h-9 border border-[#1c1c1c]/25">
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
                   aria-label="卡片网格视图"
-                  className={`p-2 ${
-                    viewMode === "grid" ? "bg-[#1c1c1c] text-[#f9f8f6]" : "bg-[#f9f8f6]"
+                  className={`w-9 h-full inline-flex items-center justify-center transition-colors ${
+                    viewMode === "grid" ? "bg-[#1c1c1c] text-[#f9f8f6]" : "bg-[#f9f8f6] hover:bg-[#1c1c1c]/5"
                   }`}
                 >
-                  <LayoutGrid className="w-4 h-4" />
+                  <LayoutGrid className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("list")}
                   aria-label="紧凑列表视图"
-                  className={`p-2 border-l border-[#1c1c1c]/25 ${
-                    viewMode === "list" ? "bg-[#1c1c1c] text-[#f9f8f6]" : "bg-[#f9f8f6]"
+                  className={`w-9 h-full inline-flex items-center justify-center border-l border-[#1c1c1c]/25 transition-colors ${
+                    viewMode === "list" ? "bg-[#1c1c1c] text-[#f9f8f6]" : "bg-[#f9f8f6] hover:bg-[#1c1c1c]/5"
                   }`}
                 >
-                  <ListIcon className="w-4 h-4" />
+                  <ListIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               <button
                 type="button"
                 onClick={() => setSettingsOpen(true)}
-                className="btn-editorial-outline py-2 px-3.5"
+                className="btn-editorial-outline h-9 py-0 px-3.5 text-[12px] tracking-[0.14em]"
               >
                 <Settings className="w-3.5 h-3.5" />
                 设置
