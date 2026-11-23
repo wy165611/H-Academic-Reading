@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: scholaread-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-scholaread}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scholaread_dev_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-scholaread}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=50
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-scholaread} -d ${POSTGRES_DB:-scholaread}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: scholaread-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-scholaread}:${POSTGRES_PASSWORD:-scholaread_dev_pass}@postgres:5432/${POSTGRES_DB:-scholaread}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-scholaread123}
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-in-production}
+      JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS:-168}
+      DEFAULT_LLM_BASE_URL: ${DEFAULT_LLM_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      DEFAULT_LLM_API_KEY: ${DEFAULT_LLM_API_KEY:-}
+      DEFAULT_VISION_MODEL: ${DEFAULT_VISION_MODEL:-qwen3.5-ocr}
+      DEFAULT_TRANSLATE_MODEL: ${DEFAULT_TRANSLATE_MODEL:-deepseek-v4.1-flash-1017}
+      DEFAULT_CHAT_MODEL: ${DEFAULT_CHAT_MODEL:-deepseek-v4.1-flash-1017}
+      DEFAULT_CHAT_THINKING_LEVEL: ${DEFAULT_CHAT_THINKING_LEVEL:-high}
+      DATA_DIR: /app/data
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-60}
+      PDF_RENDER_DPI: ${PDF_RENDER_DPI:-200}
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: scholaread-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+      NODE_OPTIONS: --max-old-space-size=512
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:

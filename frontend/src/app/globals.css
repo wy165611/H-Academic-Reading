@@ -1,0 +1,279 @@
+@import "katex/dist/katex.min.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Editorial Magazine Colors */
+  --color-ink: #1c1c1c;
+  --color-paper: #f9f8f6;
+  --color-graphite: #6b7280;
+  --color-mauve: #816d70;
+
+  /* Typography — Font Families */
+  --font-serif: Georgia, 'Times New Roman', 'Songti SC', 'Noto Serif SC', serif;
+  --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", Roboto, sans-serif;
+
+  /* Typography — Scale */
+  --text-display: 72px;
+  --leading-display: 1.05;
+  --tracking-display: -0.02em;
+  --text-heading-lg: 48px;
+  --leading-heading-lg: 1.1;
+  --tracking-heading-lg: -0.02em;
+  --text-heading: 36px;
+  --leading-heading: 1.2;
+  --tracking-heading: -0.01em;
+  --text-subheading: 28px;
+  --leading-subheading: 1.3;
+  --text-body-lg: 16px;
+  --leading-body-lg: 1.7;
+  --text-body: 14px;
+  --leading-body: 1.7;
+  --text-label: 12px;
+  --leading-label: 1.4;
+  --tracking-label: 0.2em;
+
+  /* Spacing & Layout */
+  --spacing-unit: 8px;
+  --page-max-width: 1200px;
+  --section-gap: 96px;
+  --card-padding: 24px;
+  --element-gap: 8px;
+
+  /* Strict 0 border radius */
+  --radius-cards: 0px;
+  --radius-buttons: 0px;
+  --radius-inputs: 0px;
+  --radius-images: 0px;
+}
+
+* {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+html,
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+}
+
+/* Focus-visible outline per editorial system */
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+/* Native modal dialog scroll containment (modern-web-guidance: dialog) */
+dialog:modal {
+  overscroll-behavior: contain;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  border: 1px solid var(--color-ink);
+  padding: 0;
+  max-width: min(92vw, 720px);
+  max-height: 90dvh;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background-color: rgba(28, 28, 28, 0.35);
+}
+
+/* Editorial Components */
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-graphite);
+}
+
+.section-label::before {
+  content: "";
+  display: inline-block;
+  width: 24px;
+  height: 1px;
+  background-color: var(--color-ink);
+  flex-shrink: 0;
+}
+
+.btn-editorial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--color-ink);
+  color: var(--color-paper);
+  border: 1px solid var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  padding: 14px 28px;
+  cursor: pointer;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.btn-editorial:hover:not(:disabled) {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+}
+
+.btn-editorial:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-editorial-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  border: 1px solid rgba(28, 28, 28, 0.25);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 10px 18px;
+  cursor: pointer;
+  transition: border-color 200ms ease, background-color 200ms ease, color 200ms ease;
+}
+
+.btn-editorial-outline:hover:not(:disabled) {
+  border-color: var(--color-ink);
+  background-color: var(--color-ink);
+  color: var(--color-paper);
+}
+
+.btn-editorial-outline:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.link-editorial {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.link-editorial::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background-color: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.link-editorial:hover::after {
+  transform: scaleX(1);
+}
+
+.hairline-card {
+  border-top: 1px solid rgba(28, 28, 28, 0.1);
+  padding-top: 24px;
+  transition: border-color 500ms ease;
+}
+
+.hairline-card:hover {
+  border-top-color: rgba(28, 28, 28, 0.4);
+}
+
+.hairline-card-img {
+  transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hairline-card:hover .hairline-card-img {
+  transform: scale(1.02);
+}
+
+.pull-quote {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 26px;
+  line-height: 1.35;
+  padding-left: 24px;
+  padding-right: 24px;
+  margin-top: 32px;
+  margin-bottom: 32px;
+  border-left: 2px solid var(--color-ink);
+}
+
+/* Reader inline marks: AI Q&A persistent anchor vs Highlights */
+.qa-anchor-mark {
+  border-bottom: 1.5px dashed var(--color-mauve);
+  background-color: rgba(129, 109, 112, 0.08);
+  cursor: pointer;
+  transition: background-color 200ms ease;
+}
+
+.qa-anchor-mark:hover,
+.qa-anchor-mark-active {
+  background-color: rgba(129, 109, 112, 0.18);
+}
+
+.hl-mauve {
+  background-color: rgba(129, 109, 112, 0.22);
+}
+
+.hl-amber {
+  background-color: rgba(202, 165, 96, 0.28);
+}
+
+.hl-sage {
+  background-color: rgba(120, 148, 128, 0.25);
+}
+
+.hl-slate {
+  background-color: rgba(107, 114, 128, 0.2);
+}
+
+/* Safe area padding for iPhone / iPad PWA standalone mode */
+.pwa-safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pwa-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
