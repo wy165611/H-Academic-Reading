@@ -35,6 +35,22 @@ const LATEX_TOKEN_REGEX =
 
 // Detects citations wrapped by OCR inside math delimiters like $[5, 9, 12, 18]$ or $^{[13]}$
 const MATH_CITATION_REGEX = /^(?:\^\s*\{?\s*)?(\[\s*\d+(?:\s*[,，–—\-]\s*\d+)*\s*\])(?:\s*\}?)?$/;
+// Plain non-math tokens mistakenly wrapped in $...$ by OCR (e.g., $2D$, $3D$, $(2D)$, $2\text{D}$, $360^\circ$)
+function trySimplifyPlainMathToken(tex: string): string | null {
+  const cleaned = tex
+    .replace(/\\(?:text|mathrm|mathbf)\{([^}]+)\}/g, "$1")
+    .replace(/\^\s*\{?\s*\\circ\s*\}?/g, "°")
+    .replace(/\\,/g, "")
+    .trim();
+  if (
+    /^\(?\d+(?:\.\d+)?\s*(?:°|%|D|G|K|M|GB|MB|Hz|kHz|MHz|GHz|mm|cm|m|km|kg|ms|s)?\)?$/.test(
+      cleaned
+    )
+  ) {
+    return cleaned;
+  }
+  return null;
+}
 
 function CitationSup({
   rawLabel,
@@ -52,21 +68,21 @@ function CitationSup({
 
   if (!onClickCitation) {
     return (
-      <sup className="inline-block ml-0.5 text-[0.74em] leading-none align-super text-[#816d70] font-sans font-medium">
+      <sup className="inline indent-0 ml-[1px] text-[0.74em] leading-none align-super text-[#816d70] font-sans font-medium">
         {normalized}
       </sup>
     );
   }
 
   return (
-    <sup className="inline-block ml-0.5 text-[0.74em] leading-none align-super font-sans">
+    <sup className="inline indent-0 ml-[1px] text-[0.74em] leading-none align-super font-sans">
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
           onClickCitation(firstNum, e);
         }}
-        className="text-[#816d70] hover:underline font-medium cursor-pointer"
+        className="inline indent-0 text-[#816d70] hover:underline font-medium cursor-pointer"
       >
         {normalized}
       </button>
@@ -116,9 +132,14 @@ function RichInlineTokens({
               />
             );
           }
+          const plain = trySimplifyPlainMathToken(tex);
+          if (plain !== null) {
+            return <React.Fragment key={idx}>{plain}</React.Fragment>;
+          }
           return (
             <span
               key={idx}
+              className="indent-0"
               dangerouslySetInnerHTML={{ __html: renderKatexHtml(tex, false) }}
             />
           );
@@ -135,9 +156,14 @@ function RichInlineTokens({
               />
             );
           }
+          const plain = trySimplifyPlainMathToken(tex);
+          if (plain !== null) {
+            return <React.Fragment key={idx}>{plain}</React.Fragment>;
+          }
           return (
             <span
               key={idx}
+              className="indent-0"
               dangerouslySetInnerHTML={{ __html: renderKatexHtml(tex, false) }}
             />
           );
@@ -179,7 +205,12 @@ function RichInlineTokens({
                   />
                 );
               }
-              return <React.Fragment key={sIdx}>{sub}</React.Fragment>;
+              // Trim stray space directly before a citation bracket so superscript sits snugly against CJK/text
+              const nextSub = subParts[sIdx + 1] || "";
+              const trimmedSub = /^\[\s*\d+(?:\s*[,，–—\-]\s*\d+)*\s*\]$/.test(nextSub)
+                ? sub.replace(/[ \t]+$/, "")
+                : sub;
+              return <React.Fragment key={sIdx}>{trimmedSub}</React.Fragment>;
             })}
           </React.Fragment>
         );
@@ -559,7 +590,7 @@ export default function MathText({
                     onClickAnchor?.(matchingAnchor);
                   }}
                   aria-label="打开已保存的划词 AI 问答"
-                  className="inline-flex items-center gap-0.5 ml-1 px-1 py-0 text-[10px] tracking-[0.06em] uppercase bg-[#816d70] text-[#f9f8f6] align-baseline cursor-pointer hover:bg-[#1c1c1c] transition-colors"
+                  className="inline indent-0 ml-1 px-1 py-0.5 text-[10px] leading-none tracking-[0.06em] uppercase bg-[#816d70] text-[#f9f8f6] align-super cursor-pointer hover:bg-[#1c1c1c] transition-colors"
                 >
                   AI ✦ {Math.max(1, Math.floor((matchingAnchor.messages?.length || 2) / 2))}
                 </button>

@@ -213,6 +213,7 @@ export default function PaperReaderPage() {
       setHighlightNoteInput("");
       setInlineTranslateResult(null);
       setActiveRefPopover(null);
+      setTypoOpen(false);
     };
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
@@ -625,7 +626,7 @@ export default function PaperReaderPage() {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={`py-3 px-1 flex flex-col items-center gap-1 border-b-2 transition-colors ${
+              className={`py-3 px-1 flex flex-col items-center gap-1 border-b-2 transition-colors focus:outline-none focus-visible:bg-[#1c1c1c]/[0.05] ${
                 active
                   ? "border-[#1c1c1c] text-[#1c1c1c] font-medium"
                   : "border-transparent text-[#6b7280] hover:text-[#1c1c1c]"
@@ -1046,12 +1047,12 @@ export default function PaperReaderPage() {
 
         <div className="flex items-center gap-2 shrink-0">
           {/* Stream vs Original PDF */}
-          <div className="flex border border-[#1c1c1c]/25 text-[11px]">
+          <div className="inline-flex h-8 border border-[#1c1c1c]/25 text-[11px]">
             <button
               type="button"
               onClick={() => setViewMode("stream")}
-              className={`px-2.5 py-1.5 ${
-                viewMode === "stream" ? "bg-[#1c1c1c] text-[#f9f8f6]" : ""
+              className={`px-2.5 h-full inline-flex items-center ${
+                viewMode === "stream" ? "bg-[#1c1c1c] text-[#f9f8f6]" : "hover:bg-[#1c1c1c]/5"
               }`}
             >
               流式重排
@@ -1059,8 +1060,8 @@ export default function PaperReaderPage() {
             <button
               type="button"
               onClick={() => setViewMode("pdf")}
-              className={`px-2.5 py-1.5 border-l border-[#1c1c1c]/25 ${
-                viewMode === "pdf" ? "bg-[#1c1c1c] text-[#f9f8f6]" : ""
+              className={`px-2.5 h-full inline-flex items-center border-l border-[#1c1c1c]/25 ${
+                viewMode === "pdf" ? "bg-[#1c1c1c] text-[#f9f8f6]" : "hover:bg-[#1c1c1c]/5"
               }`}
             >
               原版 PDF
@@ -1069,7 +1070,7 @@ export default function PaperReaderPage() {
 
           {/* Bilingual / ZH / EN */}
           {viewMode === "stream" && (
-            <div className="hidden sm:flex border border-[#1c1c1c]/25 text-[11px]">
+            <div className="hidden sm:inline-flex h-8 border border-[#1c1c1c]/25 text-[11px]">
               {[
                 { id: "bilingual", label: "双语" },
                 { id: "zh", label: "中文" },
@@ -1079,8 +1080,8 @@ export default function PaperReaderPage() {
                   key={m.id}
                   type="button"
                   onClick={() => setLangMode(m.id as typeof langMode)}
-                  className={`px-2.5 py-1.5 ${idx > 0 ? "border-l border-[#1c1c1c]/25" : ""} ${
-                    langMode === m.id ? "bg-[#1c1c1c] text-[#f9f8f6]" : ""
+                  className={`px-2.5 h-full inline-flex items-center ${idx > 0 ? "border-l border-[#1c1c1c]/25" : ""} ${
+                    langMode === m.id ? "bg-[#1c1c1c] text-[#f9f8f6]" : "hover:bg-[#1c1c1c]/5"
                   }`}
                 >
                   {m.label}
@@ -1090,11 +1091,11 @@ export default function PaperReaderPage() {
           )}
 
           {/* Typography `tx 文字` Popover */}
-          <div className="relative">
+          <div className="relative" data-floating-ui="true">
             <button
               type="button"
               onClick={() => setTypoOpen((v) => !v)}
-              className="px-2.5 py-1.5 border border-[#1c1c1c]/25 text-[11px] flex items-center gap-1"
+              className="h-8 px-2.5 border border-[#1c1c1c]/25 text-[11px] inline-flex items-center gap-1 hover:border-[#1c1c1c]"
             >
               <Type className="w-3.5 h-3.5" />
               <span className="hidden md:inline">tx 文字</span>
@@ -1192,7 +1193,7 @@ export default function PaperReaderPage() {
               else setSidebarOpen((v) => !v);
             }}
             aria-label="切换 AI 伴读侧栏"
-            className="p-1.5 border border-[#1c1c1c]/25 hover:bg-[#1c1c1c] hover:text-[#f9f8f6] transition-colors"
+            className="w-8 h-8 inline-flex items-center justify-center border border-[#1c1c1c]/25 hover:bg-[#1c1c1c] hover:text-[#f9f8f6] transition-colors"
           >
             {sidebarOpen ? (
               <PanelRightClose className="w-4 h-4" />
@@ -1424,6 +1425,11 @@ export default function PaperReaderPage() {
                   }
 
                   // Normal paragraph / quote
+                  const isDuplicateZh =
+                    langMode === "bilingual" &&
+                    Boolean(blk.en && blk.zh) &&
+                    blk.en.replace(/\s+/g, "") === blk.zh.replace(/\s+/g, "");
+
                   return (
                     <div
                       key={blk.id}
@@ -1453,7 +1459,7 @@ export default function PaperReaderPage() {
                           />
                         </p>
                       )}
-                      {langMode !== "en" && blk.zh && (
+                      {langMode !== "en" && blk.zh && !isDuplicateZh && (
                         <p
                           data-block-id={blk.id}
                           data-lang="zh"

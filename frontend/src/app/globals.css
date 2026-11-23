@@ -64,6 +64,15 @@ body {
   overflow-x: clip;
 }
 
+/* Prevent inline-block / KaTeX / superscripts from inheriting paragraph text-indent */
+sup,
+sub,
+button,
+.katex,
+.katex-display {
+  text-indent: 0;
+}
+
 /* Focus-visible outline per editorial system */
 :focus-visible {
   outline: 2px solid var(--color-ink);
