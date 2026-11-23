@@ -13,7 +13,7 @@
 [![PWA](https://img.shields.io/badge/iOS%20%2F%20iPadOS-PWA%20Ready-816d70?style=flat-square)](#多端访问与-pwa-安装)
 [![Memory](https://img.shields.io/badge/Optimized%20for-2C4G%20VPS-1c1c1c?style=flat-square)](#自托管-docker-快速部署)
 
-[核心特性](#核心特性) · [多模型配置](#多模型分模块配置) · [系统架构](#系统架构) · [快速部署](#自托管-docker-快速部署) · [环境变量](#环境变量说明) · [PWA 指南](#多端访问与-pwa-安装)
+[界面预览](#界面预览) · [核心特性](#核心特性) · [多模型配置](#多模型分模块配置) · [系统架构](#系统架构) · [快速部署](#自托管-docker-快速部署) · [环境变量](#环境变量说明) · [PWA 指南](#多端访问与-pwa-安装)
 
 </div>
 
@@ -24,6 +24,24 @@
 **H文献大师（H-Academic-Reading）** 是一款面向个人科研与深度阅读场景的自托管 AI 学术文献平台。系统采用克制、高辨识度的 **「编辑杂志风（Editorial Magazine Style）」** 视觉语言，将 PDF 论文解析为可流式重排的双语学术版面，并原生支持 **PC 桌面端** 与 **iPhone / iPad Safari PWA** 跨设备实时云端同步。
 
 整个后端与容器编排针对 **2 核 4GB 内存** 轻量级云主机进行深度内存优化，默认集成阿里云百炼（DashScope OpenAI 兼容接口），也可随时在前端设置页无缝切换任意 OpenAI 兼容大模型服务。
+
+---
+
+## 界面预览
+
+### 沉浸式双语流式精读 & AI 伴读
+> 双语对照流式排版、LaTeX 数学公式渲染、多色荧光高亮与批注、右侧 AI 伴读与段落锚点持久化问答。
+
+<p align="center">
+  <img src="docs/screenshots/reader-desktop.png" alt="H文献大师 双语流式精读与 AI 伴读界面" width="100%" />
+</p>
+
+### 编辑杂志风个人文献库
+> 暖米纸底色与 1px 发丝线排版、多级文件夹归类、中科院 / JCR / CCF 期刊分区徽章与实时解析进度追踪。
+
+<p align="center">
+  <img src="docs/screenshots/library-desktop.png" alt="H文献大师 编辑杂志风个人文献库界面" width="100%" />
+</p>
 
 ---
 
