@@ -29,10 +29,10 @@ function renderKatexHtml(latex: string, displayMode: boolean): string {
   }
 }
 
-/**
- * Render math ($...$, $$...$$), figure/table mentions (Fig. 1, Table 2),
- * and citation brackets ([13], [3,5]) cleanly without shifting original text offsets.
- */
+// Supports $$...$$, \[...\], $...$, and \(...\)
+const LATEX_TOKEN_REGEX =
+  /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$[^$\n]+?\$|\\\([\s\S]+?\\\))/g;
+
 function RichInlineTokens({
   segment,
   onClickCitation,
@@ -44,15 +44,16 @@ function RichInlineTokens({
   onClickFigureRef?: (label: string, e: React.MouseEvent<HTMLElement>) => void;
   disableInteractiveTokens?: boolean;
 }) {
-  // Split by $$...$$ or $...$
-  const mathRegex = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g;
-  const parts = segment.split(mathRegex);
+  const parts = segment.split(LATEX_TOKEN_REGEX);
 
   return (
     <>
       {parts.map((part, idx) => {
         if (!part) return null;
-        if (part.startsWith("$$") && part.endsWith("$$") && part.length > 4) {
+        if (
+          (part.startsWith("$$") && part.endsWith("$$") && part.length > 4) ||
+          (part.startsWith("\\[") && part.endsWith("\\]") && part.length > 4)
+        ) {
           const tex = part.slice(2, -2).trim();
           return (
             <span
@@ -71,12 +72,20 @@ function RichInlineTokens({
             />
           );
         }
+        if (part.startsWith("\\(") && part.endsWith("\\)") && part.length > 4) {
+          const tex = part.slice(2, -2).trim();
+          return (
+            <span
+              key={idx}
+              dangerouslySetInnerHTML={{ __html: renderKatexHtml(tex, false) }}
+            />
+          );
+        }
 
         if (disableInteractiveTokens) {
           return <React.Fragment key={idx}>{part}</React.Fragment>;
         }
 
-        // Tokenize figure/table references and citation numbers [13] or [3, 5]
         const refRegex =
           /((?:Fig\.?|Figure|Table|Tab\.?)\s*\d+|\[\s*\d+(?:\s*[,–\-]\s*\d+)*\s*\])/gi;
         const subParts = part.split(refRegex);
@@ -125,6 +134,285 @@ function RichInlineTokens({
   );
 }
 
+function InlineMarkdownMath({ text }: { text: string }) {
+  const parts = text.split(LATEX_TOKEN_REGEX);
+
+  return (
+    <>
+      {parts.map((part, idx) => {
+        if (!part) return null;
+        if (
+          (part.startsWith("$$") && part.endsWith("$$") && part.length > 4) ||
+          (part.startsWith("\\[") && part.endsWith("\\]") && part.length > 4)
+        ) {
+          const tex = part.slice(2, -2).trim();
+          return (
+            <span
+              key={idx}
+              className="block my-2.5 overflow-x-auto text-center"
+              dangerouslySetInnerHTML={{ __html: renderKatexHtml(tex, true) }}
+            />
+          );
+        }
+        if (part.startsWith("$") && part.endsWith("$") && part.length > 2) {
+          const tex = part.slice(1, -1).trim();
+          return (
+            <span
+              key={idx}
+              dangerouslySetInnerHTML={{ __html: renderKatexHtml(tex, false) }}
+            />
+          );
+        }
+        if (part.startsWith("\\(") && part.endsWith("\\)") && part.length > 4) {
+          const tex = part.slice(2, -2).trim();
+          return (
+            <span
+              key={idx}
+              dangerouslySetInnerHTML={{ __html: renderKatexHtml(tex, false) }}
+            />
+          );
+        }
+
+        const unescaped = part.replace(/\\([*_#\[\]()~`>+\-!])/g, "$1");
+        const mdTokens = unescaped.split(/(\*\*[^*\n]+?\*\*|`[^`\n]+?`|\*[^*\n]+?\*)/g);
+        return (
+          <React.Fragment key={idx}>
+            {mdTokens.map((tok, tIdx) => {
+              if (!tok) return null;
+              if (tok.startsWith("**") && tok.endsWith("**") && tok.length > 4) {
+                return (
+                  <strong key={tIdx} className="font-semibold text-[#1c1c1c]">
+                    {tok.slice(2, -2)}
+                  </strong>
+                );
+              }
+              if (tok.startsWith("`") && tok.endsWith("`") && tok.length > 2) {
+                return (
+                  <code
+                    key={tIdx}
+                    className="px-1.5 py-0.5 text-[0.9em] bg-[#1c1c1c]/[0.06] font-mono text-[#1c1c1c]"
+                  >
+                    {tok.slice(1, -1)}
+                  </code>
+                );
+              }
+              if (tok.startsWith("*") && tok.endsWith("*") && tok.length > 2) {
+                return (
+                  <em key={tIdx} className="italic">
+                    {tok.slice(1, -1)}
+                  </em>
+                );
+              }
+              return <React.Fragment key={tIdx}>{tok}</React.Fragment>;
+            })}
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+export function MarkdownMath({ content }: { content: string }) {
+  if (!content) return null;
+
+  const normalized = content
+    .replace(/\r\n/g, "\n")
+    .replace(/\\\[\s*\n?([\s\S]*?)\n?\s*\\\]/g, (_m, tex) => `\n\n$$${tex.trim()}$$\n\n`)
+    .replace(/\$\$\s*\n?([\s\S]*?)\n?\s*\$\$/g, (_m, tex) => `\n\n$$${tex.trim()}$$\n\n`);
+
+  const lines = normalized.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+
+    if (!line) {
+      i += 1;
+      continue;
+    }
+
+    if (line.startsWith("```")) {
+      const codeLines: string[] = [];
+      i += 1;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
+        codeLines.push(lines[i]);
+        i += 1;
+      }
+      i += 1;
+      elements.push(
+        <pre
+          key={`code-${i}`}
+          className="my-2.5 p-3 bg-[#f2f0ec] border border-[#1c1c1c]/15 overflow-x-auto text-[12px] font-mono leading-relaxed"
+        >
+          <code>{codeLines.join("\n")}</code>
+        </pre>
+      );
+      continue;
+    }
+
+    if (line.startsWith("$$") && line.endsWith("$$") && line.length > 4) {
+      const tex = line.slice(2, -2).trim();
+      elements.push(
+        <div
+          key={`eq-${i}`}
+          className="my-3 py-2 px-3 bg-[#f2f0ec]/70 border-l-2 border-[#1c1c1c]/25 overflow-x-auto text-center"
+          dangerouslySetInnerHTML={{ __html: renderKatexHtml(tex, true) }}
+        />
+      );
+      i += 1;
+      continue;
+    }
+
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(line)) {
+      elements.push(<hr key={`hr-${i}`} className="my-3 border-t border-[#1c1c1c]/15" />);
+      i += 1;
+      continue;
+    }
+
+    const hMatch = line.match(/^(#{1,4})\s+(.+)$/);
+    if (hMatch) {
+      const lvl = hMatch[1].length;
+      const titleText = hMatch[2].trim();
+      const cls =
+        lvl === 1
+          ? "font-serif text-[17px] font-semibold mt-4 mb-1.5 text-[#1c1c1c]"
+          : lvl === 2
+          ? "font-serif text-[15px] font-semibold mt-3.5 mb-1 text-[#1c1c1c]"
+          : "font-serif text-[14px] font-semibold mt-3 mb-1 text-[#1c1c1c]";
+      elements.push(
+        <div key={`h-${i}`} className={cls}>
+          <InlineMarkdownMath text={titleText} />
+        </div>
+      );
+      i += 1;
+      continue;
+    }
+
+    if (line.startsWith(">")) {
+      const quoteLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith(">")) {
+        quoteLines.push(lines[i].trim().replace(/^>\s?/, ""));
+        i += 1;
+      }
+      elements.push(
+        <blockquote
+          key={`q-${i}`}
+          className="my-2.5 pl-3 border-l-2 border-[#816d70] text-[#1c1c1c]/85 italic space-y-1"
+        >
+          {quoteLines.map((ql, qIdx) => (
+            <p key={qIdx}>
+              <InlineMarkdownMath text={ql} />
+            </p>
+          ))}
+        </blockquote>
+      );
+      continue;
+    }
+
+    if (line.includes("|") && i + 1 < lines.length && /^\|?[\s:\-|]+\|?$/.test(lines[i + 1].trim())) {
+      const parseCells = (rowStr: string) =>
+        rowStr
+          .trim()
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((c) => c.trim());
+      const headers = parseCells(line);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i].trim().includes("|")) {
+        rows.push(parseCells(lines[i]));
+        i += 1;
+      }
+      elements.push(
+        <div key={`tbl-${i}`} className="my-3 overflow-x-auto">
+          <table className="w-full border-collapse border border-[#1c1c1c]/20 text-[12px]">
+            <thead>
+              <tr className="bg-[#f2f0ec]">
+                {headers.map((h, hIdx) => (
+                  <th
+                    key={hIdx}
+                    className="border border-[#1c1c1c]/15 px-2.5 py-1.5 text-left font-medium"
+                  >
+                    <InlineMarkdownMath text={h} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, rIdx) => (
+                <tr key={rIdx}>
+                  {r.map((cell, cIdx) => (
+                    <td key={cIdx} className="border border-[#1c1c1c]/15 px-2.5 py-1.5 align-top">
+                      <InlineMarkdownMath text={cell} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      continue;
+    }
+
+    if (/^[-*•]\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[-*•]\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^[-*•]\s+/, ""));
+        i += 1;
+      }
+      elements.push(
+        <ul key={`ul-${i}`} className="my-2 pl-4 space-y-1.5 list-disc marker:text-[#816d70]">
+          {items.map((it, idx) => (
+            <li key={idx}>
+              <InlineMarkdownMath text={it} />
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+\.\s+/, ""));
+        i += 1;
+      }
+      elements.push(
+        <ol key={`ol-${i}`} className="my-2 pl-5 space-y-1.5 list-decimal marker:text-[#6b7280]">
+          {items.map((it, idx) => (
+            <li key={idx}>
+              <InlineMarkdownMath text={it} />
+            </li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+
+    const paraLines: string[] = [line];
+    i += 1;
+    while (
+      i < lines.length &&
+      lines[i].trim() !== "" &&
+      !/^(#{1,4}\s+|[-*•]\s+|\d+\.\s+|```|>|---|\*\*\*|\$\$)/.test(lines[i].trim())
+    ) {
+      paraLines.push(lines[i].trim());
+      i += 1;
+    }
+    elements.push(
+      <p key={`p-${i}`} className="my-2 leading-[1.72]">
+        <InlineMarkdownMath text={paraLines.join(" ")} />
+      </p>
+    );
+  }
+
+  return <div className="space-y-1 text-[#1c1c1c]">{elements}</div>;
+}
+
 export default function MathText({
   text,
   highlights = [],
@@ -148,7 +436,6 @@ export default function MathText({
     );
   }
 
-  // Collect all valid boundaries within [0, text.length]
   const points = new Set<number>([0, text.length]);
   for (const h of highlights) {
     const s = Math.max(0, Math.min(text.length, h.start_offset));
@@ -195,7 +482,6 @@ export default function MathText({
             <span
               key={`${start}-${end}`}
               onClick={(e) => {
-                // Avoid triggering if user is actively making a new text selection
                 const sel = window.getSelection()?.toString() || "";
                 if (sel.trim().length > 0) return;
                 e.stopPropagation();
@@ -213,6 +499,7 @@ export default function MathText({
               {isAnchorEnd && (
                 <button
                   type="button"
+                  data-ignore-offset="true"
                   onClick={(e) => {
                     e.stopPropagation();
                     onClickAnchor?.(matchingAnchor);

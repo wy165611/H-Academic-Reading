@@ -178,10 +178,37 @@ def _fallback_extract_page_blocks(
     results: list[dict[str, Any]] = []
     in_references = False
 
-    for _x0, _y0, _x1, _y1, txt in ordered:
+    def _is_cjk(ch: str) -> bool:
+        return "\u4e00" <= ch <= "\u9fff"
+
+    def _join_text(prev_s: str, next_s: str) -> str:
+        prev_s = prev_s.rstrip()
+        next_s = next_s.lstrip()
+        if not prev_s:
+            return next_s
+        if not next_s:
+            return prev_s
+        if prev_s.endswith("-") and len(prev_s) >= 2 and prev_s[-2].isalpha():
+            return prev_s[:-1] + next_s
+        if _is_cjk(prev_s[-1]) or _is_cjk(next_s[0]):
+            return prev_s + next_s
+        return prev_s + " " + next_s
+
+    prev_box: Optional[tuple[float, float, float, float]] = None
+    terminal_chars = (".", "?", "!", "。", "？", "！", ":", "：", "”", '"', "）", ")")
+    meta_prefix_re = re.compile(
+        r"^(?:关键词|关键字|作者|出处|许可|说明|原题|摘要|参考文献|keywords|abstract|author)\s*[:：\[【]?",
+        re.IGNORECASE,
+    )
+
+    for x0, y0, x1, y1, txt in ordered:
         low = txt.lower()
-        if re.match(r"^(references|bibliography)\b", low) and len(txt) < 40:
+        if (
+            re.match(r"^(references|bibliography|参考文献)\b", low)
+            and len(txt) < 40
+        ):
             in_references = True
+            prev_box = None
             results.append(
                 {
                     "type": "heading",
@@ -193,29 +220,45 @@ def _fallback_extract_page_blocks(
             continue
 
         if in_references:
+            prev_box = None
             results.append({"type": "reference", "en": txt, "page_num": page_num})
             continue
 
-        # Simple heading heuristic
         is_numbered_heading = bool(
-            re.match(r"^(\d+(\.\d+)*|[IVX]+)\s+[A-Z][A-Za-z0-9\s,:\-]{2,80}$", txt)
+            re.match(
+                r"^(\d+(?:\.\d+)*|[IVX]+)\s+[\u4e00-\u9fffA-Za-z][^\n]{0,65}$",
+                txt,
+            )
+            and len(txt) <= 70
+            and not txt.endswith(("。", ".", "，", ","))
         )
-        is_common_heading = low in (
-            "abstract",
-            "introduction",
-            "related work",
-            "methodology",
-            "methods",
-            "experiments",
-            "results",
-            "discussion",
-            "conclusion",
-            "conclusions",
-            "acknowledgments",
-            "acknowledgements",
+        is_common_heading = (
+            low
+            in (
+                "abstract",
+                "introduction",
+                "related work",
+                "methodology",
+                "methods",
+                "experiments",
+                "results",
+                "discussion",
+                "conclusion",
+                "conclusions",
+                "acknowledgments",
+                "acknowledgements",
+                "摘要",
+                "引言",
+                "结论",
+                "讨论",
+                "致谢",
+                "文献信息",
+            )
+            or bool(re.match(r"^(?:摘要|引言|结论)\s*[\[\(【].*[\]\)】]$", txt))
         )
         if is_numbered_heading or is_common_heading:
             level = 2 if re.match(r"^\d+\.\d+", txt) else 1
+            prev_box = None
             results.append(
                 {
                     "type": "heading",
@@ -224,11 +267,12 @@ def _fallback_extract_page_blocks(
                     "page_num": page_num,
                 }
             )
-        elif re.match(r"^(fig\.?|figure|table)\s*\d+", low):
-            label_m = re.match(r"^((?:fig\.?|figure|table)\s*\d+)", txt, re.IGNORECASE)
+        elif re.match(r"^(fig\.?|figure|table|图|表)\s*\d+", low):
+            label_m = re.match(r"^((?:fig\.?|figure|table|图|表)\s*\d+)", txt, re.IGNORECASE)
+            prev_box = None
             results.append(
                 {
-                    "type": "figure" if "fig" in low else "table",
+                    "type": "figure" if ("fig" in low or txt.startswith("图")) else "table",
                     "figure_label": label_m.group(1) if label_m else None,
                     "caption_en": txt,
                     "en": "",
@@ -236,7 +280,28 @@ def _fallback_extract_page_blocks(
                 }
             )
         else:
-            results.append({"type": "paragraph", "en": txt, "page_num": page_num})
+            merged_into_prev = False
+            if results and results[-1].get("type") == "paragraph" and prev_box is not None:
+                px0, py0, px1, py1 = prev_box
+                prev_h = max(8.0, py1 - py0)
+                v_gap = y0 - py1
+                same_col = abs(x0 - px0) < pw * 0.12
+                prev_txt = results[-1].get("en") or ""
+                is_new_meta = bool(meta_prefix_re.match(txt))
+                prev_ended = prev_txt.rstrip().endswith(terminal_chars)
+                if (
+                    same_col
+                    and not is_new_meta
+                    and -prev_h * 0.5 <= v_gap <= prev_h * 0.9
+                    and not prev_ended
+                ):
+                    results[-1]["en"] = _join_text(prev_txt, txt)
+                    prev_box = (min(px0, x0), py0, max(px1, x1), y1)
+                    merged_into_prev = True
+
+            if not merged_into_prev:
+                results.append({"type": "paragraph", "en": txt, "page_num": page_num})
+                prev_box = (x0, y0, x1, y1)
 
     # Crop detected image boxes if any
     for idx, (x0, y0, x1, y1) in enumerate(img_boxes, start=1):
@@ -365,19 +430,23 @@ async def _vision_parse_single_page(
 
 def _merge_cross_page_paragraphs(raw_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Step 4a: Merge paragraphs split across page boundaries when the previous page's trailing
-    paragraph lacks terminal punctuation and the next page's leading block is a plain paragraph.
+    Step 4a: Merge paragraphs split across page boundaries (and stray broken lines within a page)
+    when the preceding paragraph lacks terminal punctuation and the next block is a plain paragraph.
     """
     merged: list[dict[str, Any]] = []
-    terminal_chars = (".", "?", "!", "。", "？", "！", ":", "”", '"', ")", "]")
-    list_start_re = re.compile(r"^(?:\[\d+\]|\d+[\.\)]|\([a-zA-Z0-9]+\)|[•\-\*])\s+")
+    terminal_chars = (".", "?", "!", "。", "？", "！", ":", "：", "”", '"', ")", "]", "）")
+    list_start_re = re.compile(
+        r"^(?:\[\d+\]|\d+[\.\)]|\([a-zA-Z0-9]+\)|[•\-\*]|关键词|作者|出处|许可|说明|原题)\s*"
+    )
+
+    def _is_cjk(ch: str) -> bool:
+        return "\u4e00" <= ch <= "\u9fff"
 
     for blk in raw_blocks:
         if (
             merged
             and merged[-1].get("type") == "paragraph"
             and blk.get("type") == "paragraph"
-            and blk.get("page_num", 0) > merged[-1].get("page_num", 0)
         ):
             prev_text = (merged[-1].get("en") or "").rstrip()
             curr_text = (blk.get("en") or "").lstrip()
@@ -389,6 +458,8 @@ def _merge_cross_page_paragraphs(raw_blocks: list[dict[str, Any]]) -> list[dict[
             ):
                 if prev_text.endswith("-") and len(prev_text) >= 2 and prev_text[-2].isalpha():
                     merged[-1]["en"] = prev_text[:-1] + curr_text
+                elif _is_cjk(prev_text[-1]) or _is_cjk(curr_text[0]):
+                    merged[-1]["en"] = prev_text + curr_text
                 else:
                     merged[-1]["en"] = prev_text + " " + curr_text
                 continue

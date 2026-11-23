@@ -35,7 +35,7 @@ import {
   useEditorialDialog,
   withAuthTokenUrl,
 } from "@/lib/api";
-import MathText from "@/components/MathText";
+import MathText, { MarkdownMath } from "@/components/MathText";
 
 const PdfOriginalViewer = dynamic(
   () => import("@/components/PdfOriginalViewer"),
@@ -102,9 +102,10 @@ export default function PaperReaderPage() {
   // Typography Controls (`tx 文字`)
   const [typoOpen, setTypoOpen] = useState(false);
   const [fontSize, setFontSize] = useState<number>(16);
-  const [lineHeight, setLineHeight] = useState<number>(1.75);
+  const [lineHeight, setLineHeight] = useState<number>(1.68);
   const [contentWidth, setContentWidth] = useState<number>(760);
-  const [bodyFont, setBodyFont] = useState<"sans" | "serif">("sans");
+  const [bodyFont, setBodyFont] = useState<"sans" | "serif">("serif");
+  const [paragraphIndent, setParagraphIndent] = useState<boolean>(true);
 
   // Sidebar & Tabs
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -198,6 +199,25 @@ export default function PaperReaderPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [data?.paper_messages, data?.qa_anchors, activeAnchorId]);
 
+  // Dismiss selection toolbar, translation card, and citation popover when clicking blank area
+  useEffect(() => {
+    const onDocMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("[data-floating-ui='true']")) {
+        return;
+      }
+      setSelection(null);
+      setAskSubMode(false);
+      setAskSubInput("");
+      setHighlightSubMode(false);
+      setHighlightNoteInput("");
+      setInlineTranslateResult(null);
+      setActiveRefPopover(null);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
+
   // Handle text selection inside paragraph blocks
   const handleStreamMouseUp = useCallback(() => {
     setTimeout(() => {
@@ -216,7 +236,7 @@ export default function PaperReaderPage() {
           ? range.startContainer
           : range.startContainer.parentElement;
       const container = startEl?.closest("[data-block-id][data-lang]") as HTMLElement | null;
-      if (!container) return;
+      if (!container || !streamScrollRef.current) return;
 
       const blockId = container.getAttribute("data-block-id");
       const lang = container.getAttribute("data-lang") as "en" | "zh" | null;
@@ -249,15 +269,21 @@ export default function PaperReaderPage() {
       }
 
       const rect = range.getBoundingClientRect();
+      const canvasRect = streamScrollRef.current.getBoundingClientRect();
+      const relTop = rect.top - canvasRect.top;
+      const relBottom = rect.bottom - canvasRect.top;
+      const relLeft = rect.left - canvasRect.left;
+      const maxLeft = Math.max(12, canvasRect.width - 344);
+
       setSelection({
         blockId,
         lang,
         startOffset: startOff,
         endOffset: Math.max(startOff + 1, endOff),
         selectedText,
-        rectTop: Math.max(64, rect.top - 52),
-        rectLeft: Math.min(window.innerWidth - 330, Math.max(12, rect.left + rect.width / 2 - 150)),
-        rectBottom: Math.min(window.innerHeight - 160, rect.bottom + 10),
+        rectTop: Math.max(8, relTop - 48),
+        rectLeft: Math.min(maxLeft, Math.max(12, relLeft + rect.width / 2 - 160)),
+        rectBottom: relBottom + 10,
       });
       setAskSubMode(false);
       setHighlightSubMode(false);
@@ -728,11 +754,13 @@ export default function PaperReaderPage() {
                     {msg.thinking_content && (
                       <details className="mb-2 text-[12px] text-[#6b7280] border-l border-[#1c1c1c]/20 pl-2">
                         <summary className="cursor-pointer select-none">查看推理过程</summary>
-                        <div className="mt-1 whitespace-pre-wrap">{msg.thinking_content}</div>
+                        <div className="mt-1">
+                          <MarkdownMath content={msg.thinking_content} />
+                        </div>
                       </details>
                     )}
-                    <div className="whitespace-pre-wrap">
-                      <MathText text={msg.content} disableInteractiveTokens />
+                    <div>
+                      <MarkdownMath content={msg.content} />
                     </div>
                   </div>
                 ))}
@@ -1098,12 +1126,24 @@ export default function PaperReaderPage() {
                   <select
                     value={lineHeight}
                     onChange={(e) => setLineHeight(parseFloat(e.target.value))}
-                    className="border border-[#1c1c1c]/25 bg-[#f9f8f6] px-2 py-1"
+                    className="border border-[#1c1c1c]/25 bg-[#f9f8f6] pl-2 py-1"
                   >
                     <option value={1.55}>紧凑 1.55</option>
-                    <option value={1.75}>标准 1.75</option>
-                    <option value={1.95}>宽松 1.95</option>
+                    <option value={1.68}>标准 1.68</option>
+                    <option value={1.9}>宽松 1.90</option>
                   </select>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[#6b7280]">首行缩进</span>
+                  <button
+                    type="button"
+                    onClick={() => setParagraphIndent((v) => !v)}
+                    className={`px-2.5 py-1 border border-[#1c1c1c]/25 ${
+                      paragraphIndent ? "bg-[#1c1c1c] text-[#f9f8f6]" : "bg-[#f9f8f6]"
+                    }`}
+                  >
+                    {paragraphIndent ? "已开启 2em" : "已关闭"}
+                  </button>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[#6b7280]">版心宽度</span>
@@ -1170,7 +1210,7 @@ export default function PaperReaderPage() {
           ref={streamScrollRef}
           onMouseUp={handleStreamMouseUp}
           onTouchEnd={handleStreamMouseUp}
-          className="flex-1 min-w-0 px-5 md:px-10 py-8 md:py-12"
+          className="relative flex-1 min-w-0 px-5 md:px-10 py-8 md:py-12"
         >
           {/* Mobile Language Switcher */}
           {viewMode === "stream" && (
@@ -1388,7 +1428,7 @@ export default function PaperReaderPage() {
                     <div
                       key={blk.id}
                       id={`block-${blk.id}`}
-                      className={`space-y-2.5 transition-colors duration-500 ${
+                      className={`space-y-3 transition-colors duration-500 ${
                         isFlashed ? "bg-[#816d70]/15 p-2" : ""
                       }`}
                     >
@@ -1396,7 +1436,9 @@ export default function PaperReaderPage() {
                         <p
                           data-block-id={blk.id}
                           data-lang="en"
-                          className="text-[#1c1c1c]"
+                          className={`text-[#1c1c1c] text-justify ${
+                            paragraphIndent ? "indent-[2em]" : ""
+                          }`}
                         >
                           <MathText
                             text={blk.en}
@@ -1415,10 +1457,10 @@ export default function PaperReaderPage() {
                         <p
                           data-block-id={blk.id}
                           data-lang="zh"
-                          className={`${
+                          className={`text-justify ${
                             langMode === "bilingual"
-                              ? "text-[#1c1c1c]/80 pl-3.5 border-l border-[#1c1c1c]/15"
-                              : "text-[#1c1c1c]"
+                              ? "text-[#1c1c1c]/82 pl-3.5 border-l border-[#1c1c1c]/15"
+                              : `text-[#1c1c1c] ${paragraphIndent ? "indent-[2em]" : ""}`
                           }`}
                         >
                           <MathText
@@ -1456,6 +1498,163 @@ export default function PaperReaderPage() {
                 </section>
               )}
             </article>
+          )}
+
+          {/* Selection Floating Toolbar (document-anchored: scrolls with selected text) */}
+          {selection && (
+            <div
+              data-floating-ui="true"
+              style={{ top: `${selection.rectTop}px`, left: `${selection.rectLeft}px` }}
+              className="absolute z-40 bg-[#1c1c1c] text-[#f9f8f6] border border-[#1c1c1c] px-1.5 py-1 flex flex-col gap-2 w-max max-w-[340px]"
+            >
+              <div className="flex items-center gap-0.5 text-[12px]">
+                <button
+                  type="button"
+                  onClick={() => handleAnchorQA("explain")}
+                  className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors flex items-center gap-1"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  AI 解释
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAskSubMode((v) => !v);
+                    setHighlightSubMode(false);
+                  }}
+                  className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors flex items-center gap-1"
+                >
+                  <MessageSquarePlus className="w-3.5 h-3.5" />
+                  问问 AI
+                </button>
+                <button
+                  type="button"
+                  onClick={handleInlineTranslate}
+                  className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors flex items-center gap-1"
+                >
+                  <Languages className="w-3.5 h-3.5" />
+                  翻译
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHighlightSubMode((v) => !v);
+                    setAskSubMode(false);
+                  }}
+                  className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors"
+                >
+                  高亮
+                </button>
+                <button
+                  type="button"
+                  onClick={clearSelectionUI}
+                  aria-label="关闭划词工具栏"
+                  className="px-1.5 py-1.5 opacity-75 hover:opacity-100"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {askSubMode && (
+                <div className="bg-[#f9f8f6] text-[#1c1c1c] p-2 space-y-2 border-t border-[#1c1c1c]">
+                  <input
+                    type="text"
+                    value={askSubInput}
+                    onChange={(e) => setAskSubInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && askSubInput.trim()) {
+                        handleAnchorQA("ask", askSubInput.trim());
+                      }
+                    }}
+                    placeholder="输入针对该段选区的问题..."
+                    className="w-full border border-[#1c1c1c]/30 px-2.5 py-1.5 text-[12px]"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    disabled={!askSubInput.trim()}
+                    onClick={() => handleAnchorQA("ask", askSubInput.trim())}
+                    className="w-full py-1.5 bg-[#1c1c1c] text-[#f9f8f6] text-[11px] uppercase tracking-[0.16em]"
+                  >
+                    发送并保存为锚点问答
+                  </button>
+                </div>
+              )}
+
+              {highlightSubMode && (
+                <div className="bg-[#f9f8f6] text-[#1c1c1c] p-2.5 space-y-2 border-t border-[#1c1c1c]">
+                  <input
+                    type="text"
+                    value={highlightNoteInput}
+                    onChange={(e) => setHighlightNoteInput(e.target.value)}
+                    placeholder="可选：添加批注..."
+                    className="w-full border border-[#1c1c1c]/30 px-2 py-1 text-[12px]"
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-[#6b7280]">选择高亮色：</span>
+                    <div className="flex gap-2">
+                      {[
+                        { id: "mauve", bg: "bg-[#816d70]" },
+                        { id: "amber", bg: "bg-[#caa560]" },
+                        { id: "sage", bg: "bg-[#789480]" },
+                        { id: "slate", bg: "bg-[#6b7280]" },
+                      ].map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() =>
+                            handleCreateHighlight(c.id as "mauve" | "amber" | "sage" | "slate")
+                          }
+                          aria-label={`高亮颜色 ${c.id}`}
+                          className={`w-6 h-6 border border-[#1c1c1c] ${c.bg}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Inline Translation Result Card (document-anchored: scrolls with selected text) */}
+          {selection && inlineTranslateResult && (
+            <div
+              data-floating-ui="true"
+              style={{
+                top: `${selection.rectBottom}px`,
+                left: `${selection.rectLeft}px`,
+              }}
+              className="absolute z-40 w-[340px] max-w-[calc(100%-24px)] bg-[#f9f8f6] border border-[#1c1c1c] p-3.5 space-y-2.5 text-[13px]"
+            >
+              <div className="flex items-center justify-between border-b border-[#1c1c1c]/10 pb-1.5">
+                <span className="text-[11px] uppercase tracking-[0.16em] text-[#816d70]">
+                  上下文精准译文
+                </span>
+                <button type="button" onClick={() => setInlineTranslateResult(null)}>
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {inlineTranslateResult.loading ? (
+                <div className="py-3 text-[12px] text-[#6b7280] flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  正在结合论文上下文翻译...
+                </div>
+              ) : (
+                <>
+                  <div className="leading-[1.65] text-[#1c1c1c]">
+                    <MarkdownMath content={inlineTranslateResult.translation} />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={inlineTranslateResult.saved}
+                    onClick={handleSaveInlineTranslation}
+                    className="btn-editorial-outline w-full py-1.5 text-[11px]"
+                  >
+                    {inlineTranslateResult.saved ? "已更新保存至该段译文" : "一键更新保存为该段译文"}
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </div>
 
@@ -1501,164 +1700,10 @@ export default function PaperReaderPage() {
         </div>
       )}
 
-      {/* Selection Floating Toolbar */}
-      {selection && (
-        <div
-          style={{ top: `${selection.rectTop}px`, left: `${selection.rectLeft}px` }}
-          className="fixed z-50 bg-[#1c1c1c] text-[#f9f8f6] border border-[#1c1c1c] px-1.5 py-1 flex flex-col gap-2 max-w-[330px]"
-        >
-          <div className="flex items-center gap-0.5 text-[12px]">
-            <button
-              type="button"
-              onClick={() => handleAnchorQA("explain")}
-              className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors flex items-center gap-1"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              AI 解释
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAskSubMode((v) => !v);
-                setHighlightSubMode(false);
-              }}
-              className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors flex items-center gap-1"
-            >
-              <MessageSquarePlus className="w-3.5 h-3.5" />
-              问问 AI
-            </button>
-            <button
-              type="button"
-              onClick={handleInlineTranslate}
-              className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors flex items-center gap-1"
-            >
-              <Languages className="w-3.5 h-3.5" />
-              翻译
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setHighlightSubMode((v) => !v);
-                setAskSubMode(false);
-              }}
-              className="px-2.5 py-1.5 hover:bg-[#f9f8f6] hover:text-[#1c1c1c] transition-colors"
-            >
-              高亮
-            </button>
-            <button
-              type="button"
-              onClick={clearSelectionUI}
-              aria-label="关闭划词工具栏"
-              className="px-1.5 py-1.5 opacity-75 hover:opacity-100"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {askSubMode && (
-            <div className="bg-[#f9f8f6] text-[#1c1c1c] p-2 space-y-2 border-t border-[#1c1c1c]">
-              <input
-                type="text"
-                value={askSubInput}
-                onChange={(e) => setAskSubInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && askSubInput.trim()) {
-                    handleAnchorQA("ask", askSubInput.trim());
-                  }
-                }}
-                placeholder="输入针对该段选区的问题..."
-                className="w-full border border-[#1c1c1c]/30 px-2.5 py-1.5 text-[12px]"
-                autoFocus
-              />
-              <button
-                type="button"
-                disabled={!askSubInput.trim()}
-                onClick={() => handleAnchorQA("ask", askSubInput.trim())}
-                className="w-full py-1.5 bg-[#1c1c1c] text-[#f9f8f6] text-[11px] uppercase tracking-[0.16em]"
-              >
-                发送并保存为锚点问答
-              </button>
-            </div>
-          )}
-
-          {highlightSubMode && (
-            <div className="bg-[#f9f8f6] text-[#1c1c1c] p-2.5 space-y-2 border-t border-[#1c1c1c]">
-              <input
-                type="text"
-                value={highlightNoteInput}
-                onChange={(e) => setHighlightNoteInput(e.target.value)}
-                placeholder="可选：添加批注..."
-                className="w-full border border-[#1c1c1c]/30 px-2 py-1 text-[12px]"
-              />
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] text-[#6b7280]">选择高亮色：</span>
-                <div className="flex gap-2">
-                  {[
-                    { id: "mauve", bg: "bg-[#816d70]" },
-                    { id: "amber", bg: "bg-[#caa560]" },
-                    { id: "sage", bg: "bg-[#789480]" },
-                    { id: "slate", bg: "bg-[#6b7280]" },
-                  ].map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() =>
-                        handleCreateHighlight(c.id as "mauve" | "amber" | "sage" | "slate")
-                      }
-                      aria-label={`高亮颜色 ${c.id}`}
-                      className={`w-6 h-6 border border-[#1c1c1c] ${c.bg}`}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Inline Translation Result Card */}
-      {selection && inlineTranslateResult && (
-        <div
-          style={{
-            top: `${selection.rectBottom}px`,
-            left: `${selection.rectLeft}px`,
-          }}
-          className="fixed z-50 w-[330px] bg-[#f9f8f6] border border-[#1c1c1c] p-3.5 space-y-2.5 text-[13px]"
-        >
-          <div className="flex items-center justify-between border-b border-[#1c1c1c]/10 pb-1.5">
-            <span className="text-[11px] uppercase tracking-[0.16em] text-[#816d70]">
-              上下文精准译文
-            </span>
-            <button type="button" onClick={() => setInlineTranslateResult(null)}>
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          {inlineTranslateResult.loading ? (
-            <div className="py-3 text-[12px] text-[#6b7280] flex items-center gap-2">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              正在结合论文上下文翻译...
-            </div>
-          ) : (
-            <>
-              <p className="leading-[1.65] text-[#1c1c1c]">
-                {inlineTranslateResult.translation}
-              </p>
-              <button
-                type="button"
-                disabled={inlineTranslateResult.saved}
-                onClick={handleSaveInlineTranslation}
-                className="btn-editorial-outline w-full py-1.5 text-[11px]"
-              >
-                {inlineTranslateResult.saved ? "已更新保存至该段译文" : "一键更新保存为该段译文"}
-              </button>
-            </>
-          )}
-        </div>
-      )}
-
       {/* In-Place Citation Reference Popover */}
       {activeRefPopover && (
         <div
+          data-floating-ui="true"
           style={{
             top: `${activeRefPopover.top}px`,
             left: `${activeRefPopover.left}px`,
@@ -1779,8 +1824,8 @@ export default function PaperReaderPage() {
           </button>
 
           {synthResult && (
-            <div className="whitespace-pre-wrap text-[14px] leading-[1.7] bg-[#f3f1ed] p-4 border border-[#1c1c1c]/10">
-              {synthResult}
+            <div className="text-[14px] leading-[1.7] bg-[#f3f1ed] p-4 border border-[#1c1c1c]/10">
+              <MarkdownMath content={synthResult} />
             </div>
           )}
         </div>
