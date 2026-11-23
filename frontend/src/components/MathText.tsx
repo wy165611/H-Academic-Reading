@@ -33,6 +33,47 @@ function renderKatexHtml(latex: string, displayMode: boolean): string {
 const LATEX_TOKEN_REGEX =
   /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$[^$\n]+?\$|\\\([\s\S]+?\\\))/g;
 
+// Detects citations wrapped by OCR inside math delimiters like $[5, 9, 12, 18]$ or $^{[13]}$
+const MATH_CITATION_REGEX = /^(?:\^\s*\{?\s*)?(\[\s*\d+(?:\s*[,，–—\-]\s*\d+)*\s*\])(?:\s*\}?)?$/;
+
+function CitationSup({
+  rawLabel,
+  onClickCitation,
+}: {
+  rawLabel: string;
+  onClickCitation?: (indexStr: string, e: React.MouseEvent<HTMLElement>) => void;
+}) {
+  const normalized = rawLabel
+    .replace(/\s*,\s*/g, ",")
+    .replace(/\s*([–—\-])\s*/g, "–")
+    .replace(/\[\s+/g, "[")
+    .replace(/\s+\]/g, "]");
+  const firstNum = normalized.match(/\d+/)?.[0] || "1";
+
+  if (!onClickCitation) {
+    return (
+      <sup className="inline-block ml-0.5 text-[0.74em] leading-none align-super text-[#816d70] font-sans font-medium">
+        {normalized}
+      </sup>
+    );
+  }
+
+  return (
+    <sup className="inline-block ml-0.5 text-[0.74em] leading-none align-super font-sans">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClickCitation(firstNum, e);
+        }}
+        className="text-[#816d70] hover:underline font-medium cursor-pointer"
+      >
+        {normalized}
+      </button>
+    </sup>
+  );
+}
+
 function RichInlineTokens({
   segment,
   onClickCitation,
@@ -65,6 +106,16 @@ function RichInlineTokens({
         }
         if (part.startsWith("$") && part.endsWith("$") && part.length > 2) {
           const tex = part.slice(1, -1).trim();
+          const citMatch = !disableInteractiveTokens ? tex.match(MATH_CITATION_REGEX) : null;
+          if (citMatch) {
+            return (
+              <CitationSup
+                key={idx}
+                rawLabel={citMatch[1]}
+                onClickCitation={onClickCitation}
+              />
+            );
+          }
           return (
             <span
               key={idx}
@@ -74,6 +125,16 @@ function RichInlineTokens({
         }
         if (part.startsWith("\\(") && part.endsWith("\\)") && part.length > 4) {
           const tex = part.slice(2, -2).trim();
+          const citMatch = !disableInteractiveTokens ? tex.match(MATH_CITATION_REGEX) : null;
+          if (citMatch) {
+            return (
+              <CitationSup
+                key={idx}
+                rawLabel={citMatch[1]}
+                onClickCitation={onClickCitation}
+              />
+            );
+          }
           return (
             <span
               key={idx}
@@ -87,7 +148,7 @@ function RichInlineTokens({
         }
 
         const refRegex =
-          /((?:Fig\.?|Figure|Table|Tab\.?)\s*\d+|\[\s*\d+(?:\s*[,–\-]\s*\d+)*\s*\])/gi;
+          /((?:Fig\.?|Figure|Table|Tab\.?)\s*\d+|\[\s*\d+(?:\s*[,，–—\-]\s*\d+)*\s*\])/gi;
         const subParts = part.split(refRegex);
 
         return (
@@ -109,20 +170,13 @@ function RichInlineTokens({
                   </button>
                 );
               }
-              if (/^\[\s*\d+(?:\s*[,–\-]\s*\d+)*\s*\]$/.test(sub) && onClickCitation) {
-                const firstNum = sub.match(/\d+/)?.[0] || "1";
+              if (/^\[\s*\d+(?:\s*[,，–—\-]\s*\d+)*\s*\]$/.test(sub)) {
                 return (
-                  <button
+                  <CitationSup
                     key={sIdx}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onClickCitation(firstNum, e);
-                    }}
-                    className="inline text-[0.82em] align-super text-[#816d70] hover:underline font-medium mx-0.5 cursor-pointer"
-                  >
-                    {sub}
-                  </button>
+                    rawLabel={sub}
+                    onClickCitation={onClickCitation}
+                  />
                 );
               }
               return <React.Fragment key={sIdx}>{sub}</React.Fragment>;
