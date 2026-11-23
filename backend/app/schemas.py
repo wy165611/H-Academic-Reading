@@ -144,18 +144,32 @@ class PaperBlockOut(BaseModel):
     bbox: Optional[list[float]] = None
 
 
+HighlightColor = Literal[
+    "yellow",
+    "green",
+    "blue",
+    "pink",
+    "orange",
+    "purple",
+    "amber",
+    "mauve",
+    "sage",
+    "slate",
+]
+
+
 class HighlightCreate(BaseModel):
     block_id: str
     lang: Literal["en", "zh"] = "en"
     start_offset: int = Field(ge=0)
     end_offset: int = Field(gt=0)
     selected_text: str = Field(min_length=1)
-    color: Literal["amber", "mauve", "sage", "slate"] = "mauve"
+    color: HighlightColor = "yellow"
     note: Optional[str] = None
 
 
 class HighlightUpdate(BaseModel):
-    color: Optional[Literal["amber", "mauve", "sage", "slate"]] = None
+    color: Optional[HighlightColor] = None
     note: Optional[str] = None
 
 

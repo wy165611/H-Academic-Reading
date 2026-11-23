@@ -12,6 +12,7 @@ interface MathTextProps {
   anchors?: QAAnchorItem[];
   activeAnchorId?: string | null;
   onClickAnchor?: (anchor: QAAnchorItem) => void;
+  onClickHighlight?: (highlight: HighlightItem, e: React.MouseEvent<HTMLElement>) => void;
   onClickCitation?: (indexStr: string, e: React.MouseEvent<HTMLElement>) => void;
   onClickFigureRef?: (label: string, e: React.MouseEvent<HTMLElement>) => void;
   disableInteractiveTokens?: boolean;
@@ -504,6 +505,7 @@ export default function MathText({
   anchors = [],
   activeAnchorId,
   onClickAnchor,
+  onClickHighlight,
   onClickCitation,
   onClickFigureRef,
   disableInteractiveTokens = false,
@@ -548,12 +550,12 @@ export default function MathText({
         const slice = text.slice(start, end);
         if (!slice) return null;
 
-        const matchingAnchor = anchors.find(
-          (a) => a.start_offset <= start && a.end_offset >= end
-        );
-        const matchingHighlight = highlights.find(
-          (h) => h.start_offset <= start && h.end_offset >= end
-        );
+        const matchingAnchor = [...anchors]
+          .reverse()
+          .find((a) => a.start_offset <= start && a.end_offset >= end);
+        const matchingHighlight = [...highlights]
+          .reverse()
+          .find((h) => h.start_offset <= start && h.end_offset >= end);
 
         const isAnchorEnd =
           matchingAnchor &&
@@ -601,7 +603,21 @@ export default function MathText({
 
         if (matchingHighlight) {
           return (
-            <mark key={`${start}-${end}`} className={`${hlClass} text-inherit`}>
+            <mark
+              key={`${start}-${end}`}
+              onClick={(e) => {
+                const sel = window.getSelection()?.toString() || "";
+                if (sel.trim().length > 0) return;
+                e.stopPropagation();
+                onClickHighlight?.(matchingHighlight, e);
+              }}
+              title={
+                matchingHighlight.note
+                  ? `批注：${matchingHighlight.note}（点击修改或取消高亮）`
+                  : "点击修改颜色、添加批注或取消高亮"
+              }
+              className={`${hlClass} text-inherit cursor-pointer hover:brightness-95 transition-all`}
+            >
               <RichInlineTokens
                 segment={slice}
                 onClickCitation={onClickCitation}

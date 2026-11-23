@@ -78,6 +78,27 @@ export interface ReferenceItem {
   raw: string;
 }
 
+export type HighlightColor =
+  | "yellow"
+  | "green"
+  | "blue"
+  | "pink"
+  | "orange"
+  | "purple"
+  | "mauve"
+  | "amber"
+  | "sage"
+  | "slate";
+
+export const HIGHLIGHT_PALETTE: { id: HighlightColor; label: string; swatch: string }[] = [
+  { id: "yellow", label: "亮黄", swatch: "#fde047" },
+  { id: "green", label: "翠绿", swatch: "#86efac" },
+  { id: "blue", label: "天蓝", swatch: "#93c5fd" },
+  { id: "pink", label: "玫粉", swatch: "#f9a8d4" },
+  { id: "orange", label: "明橙", swatch: "#fdba74" },
+  { id: "purple", label: "亮紫", swatch: "#d8b4fe" },
+];
+
 export interface HighlightItem {
   id: string;
   paper_id: string;
@@ -86,7 +107,7 @@ export interface HighlightItem {
   start_offset: number;
   end_offset: number;
   selected_text: string;
-  color: "mauve" | "amber" | "sage" | "slate";
+  color: HighlightColor;
   note: string | null;
   created_at: string;
 }

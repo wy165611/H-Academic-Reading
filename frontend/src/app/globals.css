@@ -269,20 +269,45 @@ dialog::backdrop {
   background-color: rgba(129, 109, 112, 0.18);
 }
 
+.hl-yellow {
+  background-color: rgba(253, 224, 71, 0.58);
+}
+
+.hl-green {
+  background-color: rgba(134, 239, 172, 0.52);
+}
+
+.hl-blue {
+  background-color: rgba(147, 197, 253, 0.50);
+}
+
+.hl-pink {
+  background-color: rgba(249, 168, 212, 0.52);
+}
+
+.hl-orange {
+  background-color: rgba(253, 186, 116, 0.55);
+}
+
+.hl-purple {
+  background-color: rgba(216, 180, 254, 0.52);
+}
+
+/* Legacy palette compatibility */
 .hl-mauve {
-  background-color: rgba(129, 109, 112, 0.22);
+  background-color: rgba(249, 168, 212, 0.42);
 }
 
 .hl-amber {
-  background-color: rgba(202, 165, 96, 0.28);
+  background-color: rgba(253, 224, 71, 0.52);
 }
 
 .hl-sage {
-  background-color: rgba(120, 148, 128, 0.25);
+  background-color: rgba(134, 239, 172, 0.48);
 }
 
 .hl-slate {
-  background-color: rgba(107, 114, 128, 0.2);
+  background-color: rgba(147, 197, 253, 0.44);
 }
 
 /* Safe area padding for iPhone / iPad PWA standalone mode */

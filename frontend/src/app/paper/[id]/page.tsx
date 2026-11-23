@@ -26,6 +26,8 @@ import {
 import {
   apiFetch,
   ChatMessageItem,
+  HIGHLIGHT_PALETTE,
+  HighlightColor,
   HighlightItem,
   PaperBlockItem,
   PaperItem,
@@ -134,12 +136,19 @@ export default function PaperReaderPage() {
     saved: boolean;
   } | null>(null);
 
-  // In-place Figure / Reference Popovers
+  // In-place Figure / Reference / Highlight Edit Popovers
   const [activeFigureModal, setActiveFigureModal] = useState<PaperBlockItem | null>(null);
   const [activeRefPopover, setActiveRefPopover] = useState<{
     refItem: ReferenceItem;
     top: number;
     left: number;
+  } | null>(null);
+  const [activeHighlightPopover, setActiveHighlightPopover] = useState<{
+    highlight: HighlightItem;
+    top: number;
+    left: number;
+    noteDraft: string;
+    saving: boolean;
   } | null>(null);
 
   // Multi-paper synthesis modal
@@ -213,6 +222,7 @@ export default function PaperReaderPage() {
       setHighlightNoteInput("");
       setInlineTranslateResult(null);
       setActiveRefPopover(null);
+      setActiveHighlightPopover(null);
       setTypoOpen(false);
     };
     document.addEventListener("mousedown", onDocMouseDown);
@@ -412,8 +422,8 @@ export default function PaperReaderPage() {
     setInlineTranslateResult((prev) => (prev ? { ...prev, saved: true } : prev));
   }
 
-  // Action 4: Highlight & Optional Note
-  async function handleCreateHighlight(color: "mauve" | "amber" | "sage" | "slate") {
+  // Action 4: Highlight & Optional Note (supports vivid 6-color palette and overriding existing color)
+  async function handleCreateHighlight(color: HighlightColor) {
     if (!selection || !paperId) return;
     const created = await apiFetch<HighlightItem>(`/api/papers/${paperId}/highlights`, {
       method: "POST",
@@ -428,10 +438,75 @@ export default function PaperReaderPage() {
       }),
     });
     setData((prev) =>
-      prev ? { ...prev, highlights: [...prev.highlights, created] } : prev
+      prev
+        ? {
+            ...prev,
+            // Place updated/created highlight at the end so latest selection always wins visually
+            highlights: [...prev.highlights.filter((h) => h.id !== created.id), created],
+          }
+        : prev
     );
     clearSelectionUI();
     window.getSelection()?.removeAllRanges();
+  }
+
+  // Click existing highlighted text -> open edit popover (change color, add/edit note, remove highlight)
+  const handleClickHighlight = (hl: HighlightItem, e: React.MouseEvent<HTMLElement>) => {
+    if (!streamScrollRef.current) return;
+    clearSelectionUI();
+    const targetRect = e.currentTarget.getBoundingClientRect();
+    const canvasRect = streamScrollRef.current.getBoundingClientRect();
+    const relBottom = targetRect.bottom - canvasRect.top + 8;
+    const relLeft = targetRect.left - canvasRect.left;
+    const maxLeft = Math.max(12, canvasRect.width - 336);
+    setActiveHighlightPopover({
+      highlight: hl,
+      top: relBottom,
+      left: Math.min(maxLeft, Math.max(12, relLeft)),
+      noteDraft: hl.note || "",
+      saving: false,
+    });
+  };
+
+  async function handleUpdateHighlightColor(color: HighlightColor) {
+    if (!activeHighlightPopover || !paperId) return;
+    const hlId = activeHighlightPopover.highlight.id;
+    const updated = await apiFetch<HighlightItem>(`/api/papers/${paperId}/highlights/${hlId}`, {
+      method: "PUT",
+      body: JSON.stringify({ color }),
+    });
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            highlights: [...prev.highlights.filter((h) => h.id !== updated.id), updated],
+          }
+        : prev
+    );
+    setActiveHighlightPopover((prev) => (prev ? { ...prev, highlight: updated } : prev));
+  }
+
+  async function handleSaveHighlightNote() {
+    if (!activeHighlightPopover || !paperId) return;
+    const hlId = activeHighlightPopover.highlight.id;
+    setActiveHighlightPopover((prev) => (prev ? { ...prev, saving: true } : prev));
+    try {
+      const updated = await apiFetch<HighlightItem>(`/api/papers/${paperId}/highlights/${hlId}`, {
+        method: "PUT",
+        body: JSON.stringify({ note: activeHighlightPopover.noteDraft }),
+      });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              highlights: prev.highlights.map((h) => (h.id === updated.id ? updated : h)),
+            }
+          : prev
+      );
+      setActiveHighlightPopover(null);
+    } finally {
+      setActiveHighlightPopover((prev) => (prev ? { ...prev, saving: false } : prev));
+    }
   }
 
   // Click existing QA Anchor mark in text -> open anchor thread
@@ -1464,6 +1539,7 @@ export default function PaperReaderPage() {
                             anchors={blockAnchors.filter((a) => a.lang === "en")}
                             activeAnchorId={activeAnchorId}
                             onClickAnchor={handleClickAnchor}
+                            onClickHighlight={handleClickHighlight}
                             onClickCitation={handleClickCitation}
                             onClickFigureRef={handleClickFigureRef}
                           />
@@ -1487,6 +1563,7 @@ export default function PaperReaderPage() {
                             anchors={blockAnchors.filter((a) => a.lang === "zh")}
                             activeAnchorId={activeAnchorId}
                             onClickAnchor={handleClickAnchor}
+                            onClickHighlight={handleClickHighlight}
                             onClickCitation={handleClickCitation}
                             onClickFigureRef={handleClickFigureRef}
                           />
@@ -1616,21 +1693,16 @@ export default function PaperReaderPage() {
                   />
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[11px] text-[#6b7280]">选择高亮色：</span>
-                    <div className="flex gap-2">
-                      {[
-                        { id: "mauve", bg: "bg-[#816d70]" },
-                        { id: "amber", bg: "bg-[#caa560]" },
-                        { id: "sage", bg: "bg-[#789480]" },
-                        { id: "slate", bg: "bg-[#6b7280]" },
-                      ].map((c) => (
+                    <div className="flex gap-1.5">
+                      {HIGHLIGHT_PALETTE.map((c) => (
                         <button
                           key={c.id}
                           type="button"
-                          onClick={() =>
-                            handleCreateHighlight(c.id as "mauve" | "amber" | "sage" | "slate")
-                          }
-                          aria-label={`高亮颜色 ${c.id}`}
-                          className={`w-6 h-6 border border-[#1c1c1c] ${c.bg}`}
+                          onClick={() => handleCreateHighlight(c.id)}
+                          title={c.label}
+                          aria-label={`高亮颜色 ${c.label}`}
+                          style={{ backgroundColor: c.swatch }}
+                          className="w-6 h-6 border border-[#1c1c1c]/60 hover:scale-110 transition-transform"
                         />
                       ))}
                     </div>
@@ -1680,6 +1752,94 @@ export default function PaperReaderPage() {
                   </button>
                 </>
               )}
+            </div>
+          )}
+          {/* Click Existing Highlight Popover (change color, add/edit note, remove highlight) */}
+          {activeHighlightPopover && (
+            <div
+              data-floating-ui="true"
+              onMouseUp={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
+              style={{
+                top: `${activeHighlightPopover.top}px`,
+                left: `${activeHighlightPopover.left}px`,
+              }}
+              className="absolute z-40 w-[324px] max-w-[calc(100%-24px)] bg-[#f9f8f6] border border-[#1c1c1c] p-3.5 space-y-3 text-[12px]"
+            >
+              <div className="flex items-center justify-between border-b border-[#1c1c1c]/15 pb-2">
+                <span className="text-[11px] uppercase tracking-[0.16em] text-[#6b7280]">
+                  编辑高亮与批注
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveHighlightPopover(null)}
+                  aria-label="关闭高亮编辑框"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-[#6b7280]">更换颜色</span>
+                <div className="flex gap-1.5">
+                  {HIGHLIGHT_PALETTE.map((c) => {
+                    const isCurrent = activeHighlightPopover.highlight.color === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => handleUpdateHighlightColor(c.id)}
+                        title={c.label}
+                        aria-label={`切换为${c.label}`}
+                        style={{ backgroundColor: c.swatch }}
+                        className={`w-6 h-6 transition-transform ${
+                          isCurrent
+                            ? "border-2 border-[#1c1c1c] scale-110"
+                            : "border border-[#1c1c1c]/40 hover:scale-110"
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] text-[#6b7280]">批注内容</label>
+                <textarea
+                  rows={2}
+                  value={activeHighlightPopover.noteDraft}
+                  onChange={(e) =>
+                    setActiveHighlightPopover((prev) =>
+                      prev ? { ...prev, noteDraft: e.target.value } : prev
+                    )
+                  }
+                  placeholder="为这段高亮补充批注或想法..."
+                  className="w-full bg-[#f9f8f6] border border-[#1c1c1c]/25 p-2 text-[12px] resize-none focus:border-[#1c1c1c] focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const idToDel = activeHighlightPopover.highlight.id;
+                    setActiveHighlightPopover(null);
+                    await handleDeleteHighlight(idToDel);
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-[#816d70] text-[#816d70] hover:bg-[#816d70] hover:text-[#f9f8f6] transition-colors text-[11px]"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  取消高亮
+                </button>
+                <button
+                  type="button"
+                  disabled={activeHighlightPopover.saving}
+                  onClick={handleSaveHighlightNote}
+                  className="px-3.5 py-1.5 bg-[#1c1c1c] text-[#f9f8f6] hover:bg-[#1c1c1c]/85 text-[11px] uppercase tracking-[0.14em]"
+                >
+                  {activeHighlightPopover.saving ? "保存中..." : "保存批注"}
+                </button>
+              </div>
             </div>
           )}
         </div>

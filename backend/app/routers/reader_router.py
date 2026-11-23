@@ -273,6 +273,25 @@ def create_highlight(
     if not blk:
         raise HTTPException(status_code=404, detail="Block not found")
 
+    existing = (
+        db.query(Highlight)
+        .filter(
+            Highlight.paper_id == paper_id,
+            Highlight.block_id == payload.block_id,
+            Highlight.lang == payload.lang,
+            Highlight.start_offset == payload.start_offset,
+            Highlight.end_offset == payload.end_offset,
+        )
+        .first()
+    )
+    if existing:
+        existing.color = payload.color
+        if payload.note is not None and payload.note.strip():
+            existing.note = payload.note.strip()
+        db.commit()
+        db.refresh(existing)
+        return _highlight_to_out(existing)
+
     h = Highlight(
         id=str(uuid.uuid4()),
         paper_id=paper_id,
