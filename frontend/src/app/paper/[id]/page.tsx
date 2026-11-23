@@ -949,7 +949,7 @@ export default function PaperReaderPage() {
 
       {/* Chat Composer Footer (shown on Chat Tab) */}
       {activeTab === "chat" && (
-        <div className="p-3.5 border-t border-[#1c1c1c]/15 bg-[#f9f8f6] space-y-2 pwa-safe-bottom">
+        <div className="px-4 pt-4 pb-[calc(2.75rem+env(safe-area-inset-bottom,0px))] border-t border-[#1c1c1c]/15 bg-[#f9f8f6] space-y-3">
           <div className="flex items-center justify-between text-[11px] text-[#6b7280]">
             <span>{activeAnchor ? "向当前锚点继续追问" : "向全文 AI 提问"}</span>
             <select
@@ -958,7 +958,7 @@ export default function PaperReaderPage() {
               onChange={(e) =>
                 setThinkingLevel(e.target.value as "high" | "medium" | "low")
               }
-              className="bg-[#f9f8f6] border border-[#1c1c1c]/20 px-1.5 py-0.5 text-[11px] text-[#1c1c1c]"
+              className="bg-[#f9f8f6] border border-[#1c1c1c]/20 pl-2.5 py-1 text-[11px] text-[#1c1c1c]"
             >
               <option value="high">思考: High</option>
               <option value="medium">思考: Medium</option>
