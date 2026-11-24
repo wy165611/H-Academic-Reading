@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BookOpen,
+  Bot,
   ChevronDown,
   FileText,
   Folder as FolderIcon,
@@ -33,6 +34,7 @@ import {
   withAuthTokenUrl,
 } from "@/lib/api";
 import SettingsModal from "@/components/SettingsModal";
+import GlobalAIChatDrawer from "@/components/GlobalAIChatDrawer";
 
 interface LibraryViewProps {
   username: string;
@@ -63,6 +65,7 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
 
   // Modals
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [globalChatOpen, setGlobalChatOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addTab, setAddTab] = useState<"file" | "url">("file");
   const [urlInput, setUrlInput] = useState("");
@@ -562,6 +565,17 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
         <button
           type="button"
           onClick={() => {
+            setGlobalChatOpen(true);
+            setMobileSidebarOpen(false);
+          }}
+          className="w-full btn-editorial py-2.5 px-3.5 justify-start text-[11px] tracking-[0.14em]"
+        >
+          <Bot className="w-3.5 h-3.5" />
+          全局 AI 助手
+        </button>
+        <button
+          type="button"
+          onClick={() => {
             setSynthResult(null);
             setSynthError(null);
             setSynthOpen(true);
@@ -719,6 +733,15 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
                   <ListIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setGlobalChatOpen(true)}
+                className="btn-editorial-outline h-9 py-0 px-3.5 text-[12px] tracking-[0.14em]"
+              >
+                <Bot className="w-3.5 h-3.5 text-[#816d70]" />
+                全局 AI
+              </button>
 
               <button
                 type="button"
@@ -1316,6 +1339,10 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
       </dialog>
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <GlobalAIChatDrawer
+        open={globalChatOpen}
+        onClose={() => setGlobalChatOpen(false)}
+      />
     </div>
   );
 }

@@ -96,6 +96,8 @@ class Paper(Base):
     reading_progress = Column(Float, nullable=False, default=0.0)
     last_block_id = Column(String(64), nullable=True)
     last_page = Column(Integer, nullable=False, default=1)
+    last_lang_mode = Column(String(16), nullable=False, default="zh")
+    last_view_mode = Column(String(16), nullable=False, default="stream")
 
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

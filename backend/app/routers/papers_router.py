@@ -46,6 +46,8 @@ def paper_to_out(p: Paper) -> PaperOut:
         reading_progress=float(p.reading_progress or 0.0),
         last_block_id=p.last_block_id,
         last_page=int(p.last_page or 1),
+        last_lang_mode=p.last_lang_mode or "zh",
+        last_view_mode=p.last_view_mode or "stream",
         created_at=p.created_at,
         updated_at=p.updated_at,
     )

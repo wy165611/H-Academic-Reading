@@ -37,6 +37,16 @@ async def lifespan(_app: FastAPI):
                 "ALTER TABLE papers ADD COLUMN IF NOT EXISTS last_page INTEGER NOT NULL DEFAULT 1"
             )
         )
+        conn.execute(
+            text(
+                "ALTER TABLE papers ADD COLUMN IF NOT EXISTS last_lang_mode VARCHAR(16) NOT NULL DEFAULT 'zh'"
+            )
+        )
+        conn.execute(
+            text(
+                "ALTER TABLE papers ADD COLUMN IF NOT EXISTS last_view_mode VARCHAR(16) NOT NULL DEFAULT 'stream'"
+            )
+        )
     db = SessionLocal()
     try:
         get_or_create_settings(db)

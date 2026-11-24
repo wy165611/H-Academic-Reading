@@ -43,6 +43,8 @@ export interface PaperItem {
   reading_progress?: number;
   last_block_id?: string | null;
   last_page?: number;
+  last_lang_mode?: "zh" | "en" | "bilingual";
+  last_view_mode?: "stream" | "pdf";
   created_at: string;
   updated_at: string;
 }

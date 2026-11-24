@@ -98,9 +98,9 @@ export default function PaperReaderPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Reader View Modes
+  // Reader View Modes (default to Chinese view on first open; restores last used mode thereafter)
   const [viewMode, setViewMode] = useState<"stream" | "pdf">("stream");
-  const [langMode, setLangMode] = useState<"bilingual" | "zh" | "en">("bilingual");
+  const [langMode, setLangMode] = useState<"bilingual" | "zh" | "en">("zh");
 
   // Typography Controls (`tx 文字`)
   const [typoOpen, setTypoOpen] = useState(false);
@@ -168,7 +168,15 @@ export default function PaperReaderPage() {
     reading_progress: number;
     last_block_id: string | null;
     last_page: number;
-  }>({ reading_progress: 0, last_block_id: null, last_page: 1 });
+    last_lang_mode: "zh" | "en" | "bilingual";
+    last_view_mode: "stream" | "pdf";
+  }>({
+    reading_progress: 0,
+    last_block_id: null,
+    last_page: 1,
+    last_lang_mode: "zh",
+    last_view_mode: "stream",
+  });
   const [resumeToast, setResumeToast] = useState<string | null>(null);
 
   const loadReaderData = useCallback(async () => {
@@ -196,14 +204,11 @@ export default function PaperReaderPage() {
     return () => clearInterval(t);
   }, [data?.paper, loadReaderData]);
 
-  // Save reading position to cloud (supports keepalive on tab close/background)
+  // Save reading position & mode to cloud (supports keepalive on tab close/background)
   const flushReadingProgress = useCallback(
     (keepalive = false) => {
       if (!paperId) return;
       const payload = latestPosRef.current;
-      if (payload.reading_progress <= 0 && !payload.last_block_id && payload.last_page <= 1) {
-        return;
-      }
       const token = getStoredToken();
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -218,23 +223,50 @@ export default function PaperReaderPage() {
     [paperId]
   );
 
-  // Restore last reading position once when paper blocks finish loading
+  const handleSwitchLangMode = useCallback(
+    (nextLang: "bilingual" | "zh" | "en") => {
+      setLangMode(nextLang);
+      latestPosRef.current = { ...latestPosRef.current, last_lang_mode: nextLang };
+      flushReadingProgress(false);
+    },
+    [flushReadingProgress]
+  );
+
+  const handleSwitchViewMode = useCallback(
+    (nextView: "stream" | "pdf") => {
+      setViewMode(nextView);
+      latestPosRef.current = { ...latestPosRef.current, last_view_mode: nextView };
+      flushReadingProgress(false);
+    },
+    [flushReadingProgress]
+  );
+
+  // Restore last language/view mode and exact reading position once when paper loads
   useEffect(() => {
     if (!data?.paper || hasRestoredPosRef.current) return;
-    if (viewMode !== "stream" || data.blocks.length === 0) return;
+    if (data.blocks.length === 0 && data.paper.last_view_mode !== "pdf") return;
 
     hasRestoredPosRef.current = true;
     const savedBlockId = data.paper.last_block_id || null;
     const savedProgress = Number(data.paper.reading_progress || 0);
     const savedPage = Number(data.paper.last_page || 1);
+    const savedLang = (data.paper.last_lang_mode || "zh") as "zh" | "en" | "bilingual";
+    const savedView = (data.paper.last_view_mode || "stream") as "stream" | "pdf";
+
+    setLangMode(savedLang);
+    setViewMode(savedView);
     latestPosRef.current = {
       reading_progress: savedProgress,
       last_block_id: savedBlockId,
       last_page: savedPage,
+      last_lang_mode: savedLang,
+      last_view_mode: savedView,
     };
 
+    if (savedView === "pdf") return;
     if (!savedBlockId && savedProgress < 2) return;
 
+    const langLabel = savedLang === "zh" ? "中文" : savedLang === "en" ? "英文" : "双语";
     const timer = setTimeout(() => {
       if (savedBlockId) {
         const el = document.getElementById(`block-${savedBlockId}`);
@@ -245,8 +277,8 @@ export default function PaperReaderPage() {
           setTimeout(() => setFlashBlockId(null), 1600);
           setResumeToast(
             savedProgress >= 1
-              ? `已自动定位至上次阅读位置 (${Math.round(savedProgress)}%)`
-              : "已自动定位至上次阅读位置"
+              ? `已回到上次${langLabel}阅读位置 (${Math.round(savedProgress)}%)`
+              : `已回到上次${langLabel}阅读位置`
           );
           setTimeout(() => setResumeToast(null), 4500);
           return;
@@ -256,14 +288,14 @@ export default function PaperReaderPage() {
         const max = document.documentElement.scrollHeight - window.innerHeight;
         if (max > 0) {
           window.scrollTo({ top: Math.round((savedProgress / 100) * max), behavior: "auto" });
-          setResumeToast(`已自动定位至上次阅读位置 (${Math.round(savedProgress)}%)`);
+          setResumeToast(`已回到上次${langLabel}阅读位置 (${Math.round(savedProgress)}%)`);
           setTimeout(() => setResumeToast(null), 4500);
         }
       }
-    }, 120);
+    }, 180);
 
     return () => clearTimeout(timer);
-  }, [data?.paper, data?.blocks.length, viewMode]);
+  }, [data?.paper, data?.blocks.length]);
 
   // Scroll reading progress tracker + debounced cloud persistence
   useEffect(() => {
@@ -290,6 +322,7 @@ export default function PaperReaderPage() {
           }
         }
         latestPosRef.current = {
+          ...latestPosRef.current,
           reading_progress: pct,
           last_block_id: currentBlockId,
           last_page: currentPage,
@@ -840,8 +873,8 @@ export default function PaperReaderPage() {
         })}
       </div>
 
-      {/* Tab Body */}
-      <div className="flex-1 overflow-y-auto p-4">
+      {/* Tab Body (generous bottom padding so iPad/tablet last item is never clipped) */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]">
         {activeTab === "chat" && (
           <div className="flex flex-col h-full justify-between gap-4">
             <div className="space-y-4">
@@ -913,6 +946,10 @@ export default function PaperReaderPage() {
                     {
                       label: "生成一份学习指南",
                       prompt: "请为我生成一份针对这篇论文的学习指南（先导背景知识、精读重点、容易忽视的假设与思考题）。",
+                    },
+                    {
+                      label: "梳理我在本文的批注与疑问难点",
+                      prompt: "请结合我在这篇论文中做过的所有高亮、批注和划词 AI 提问记录，帮我整理我的批注待办事项，并总结我阅读本文时最困惑的核心难点及解答要点。",
                     },
                   ].map((item) => (
                     <button
@@ -1251,7 +1288,7 @@ export default function PaperReaderPage() {
           <div className="inline-flex h-8 border border-[#1c1c1c]/25 text-[11px]">
             <button
               type="button"
-              onClick={() => setViewMode("stream")}
+              onClick={() => handleSwitchViewMode("stream")}
               className={`px-2.5 h-full inline-flex items-center ${
                 viewMode === "stream" ? "bg-[#1c1c1c] text-[#f9f8f6]" : "hover:bg-[#1c1c1c]/5"
               }`}
@@ -1260,7 +1297,7 @@ export default function PaperReaderPage() {
             </button>
             <button
               type="button"
-              onClick={() => setViewMode("pdf")}
+              onClick={() => handleSwitchViewMode("pdf")}
               className={`px-2.5 h-full inline-flex items-center border-l border-[#1c1c1c]/25 ${
                 viewMode === "pdf" ? "bg-[#1c1c1c] text-[#f9f8f6]" : "hover:bg-[#1c1c1c]/5"
               }`}
@@ -1280,7 +1317,7 @@ export default function PaperReaderPage() {
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setLangMode(m.id as typeof langMode)}
+                  onClick={() => handleSwitchLangMode(m.id as typeof langMode)}
                   className={`px-2.5 h-full inline-flex items-center ${idx > 0 ? "border-l border-[#1c1c1c]/25" : ""} ${
                     langMode === m.id ? "bg-[#1c1c1c] text-[#f9f8f6]" : "hover:bg-[#1c1c1c]/5"
                   }`}
@@ -1426,7 +1463,7 @@ export default function PaperReaderPage() {
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setLangMode(m.id as typeof langMode)}
+                    onClick={() => handleSwitchLangMode(m.id as typeof langMode)}
                     className={`px-3 py-1.5 ${idx > 0 ? "border-l border-[#1c1c1c]/25" : ""} ${
                       langMode === m.id ? "bg-[#1c1c1c] text-[#f9f8f6]" : ""
                     }`}
@@ -2002,9 +2039,9 @@ export default function PaperReaderPage() {
           )}
         </div>
 
-        {/* Desktop Right AI Sidebar */}
+        {/* Desktop & Tablet Landscape Right AI Sidebar (uses 100dvh - safe-top to prevent bottom clipping on iPad) */}
         {sidebarOpen && (
-          <aside className="hidden lg:block w-[400px] shrink-0 border-l border-[#1c1c1c]/15 sticky top-14 h-[calc(100vh-3.5rem)]">
+          <aside className="hidden lg:flex flex-col w-[390px] xl:w-[410px] shrink-0 border-l border-[#1c1c1c]/15 sticky top-[calc(3.5rem+env(safe-area-inset-top,0px))] h-[calc(100dvh-3.5rem-env(safe-area-inset-top,0px))] overflow-hidden">
             {sidebarPanel}
           </aside>
         )}

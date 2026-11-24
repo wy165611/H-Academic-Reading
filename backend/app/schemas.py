@@ -127,6 +127,8 @@ class PaperOut(BaseModel):
     reading_progress: float = 0.0
     last_block_id: Optional[str] = None
     last_page: int = 1
+    last_lang_mode: str = "zh"
+    last_view_mode: str = "stream"
     created_at: datetime
     updated_at: datetime
 
@@ -135,6 +137,8 @@ class ReadingProgressUpdate(BaseModel):
     reading_progress: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     last_block_id: Optional[str] = None
     last_page: Optional[int] = Field(default=None, ge=1)
+    last_lang_mode: Optional[Literal["zh", "en", "bilingual"]] = None
+    last_view_mode: Optional[Literal["stream", "pdf"]] = None
 
 
 class PaperBlockOut(BaseModel):

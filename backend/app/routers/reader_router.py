@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models import (
     ChatMessage,
     ChatThread,
+    Folder,
     Highlight,
     Paper,
     PaperBlock,
@@ -214,12 +215,18 @@ def update_reading_progress(
         paper.last_block_id = payload.last_block_id
     if payload.last_page is not None:
         paper.last_page = int(payload.last_page)
+    if payload.last_lang_mode is not None:
+        paper.last_lang_mode = payload.last_lang_mode
+    if payload.last_view_mode is not None:
+        paper.last_view_mode = payload.last_view_mode
     db.commit()
     return {
         "ok": True,
         "reading_progress": paper.reading_progress,
         "last_block_id": paper.last_block_id,
         "last_page": paper.last_page,
+        "last_lang_mode": paper.last_lang_mode,
+        "last_view_mode": paper.last_view_mode,
     }
 
 
@@ -505,6 +512,164 @@ def delete_qa_anchor(
     return {"ok": True}
 
 
+def _build_paper_annotations_memory(db: Session, paper_id: str, max_chars: int = 5000) -> str:
+    """Collect all user highlights, notes, and selection QA anchor histories for one paper."""
+    highlights = (
+        db.query(Highlight)
+        .filter(Highlight.paper_id == paper_id)
+        .order_by(Highlight.created_at.asc())
+        .all()
+    )
+    anchors = (
+        db.query(QAAnchor)
+        .filter(QAAnchor.paper_id == paper_id)
+        .order_by(QAAnchor.created_at.asc())
+        .all()
+    )
+
+    lines: list[str] = []
+    if highlights:
+        lines.append("【读者在本篇文献中做过的高亮与批注】:")
+        for idx, h in enumerate(highlights, start=1):
+            note_part = f" | 读者批注: {h.note}" if h.note else ""
+            lines.append(f"{idx}. [{h.color}] 选中内容: 「{h.selected_text[:240]}」{note_part}")
+
+    if anchors:
+        lines.append("\n【读者在本篇文献中划词发起过的 AI 提问与解答历史】:")
+        for idx, a in enumerate(anchors, start=1):
+            msgs = (
+                db.query(ChatMessage)
+                .filter(ChatMessage.thread_id == a.thread_id)
+                .order_by(ChatMessage.created_at.asc())
+                .all()
+            )
+            lines.append(f"{idx}. 划词片段: 「{a.selected_text[:220]}」")
+            for m in msgs:
+                role_label = "读者提问" if m.role == "user" else "AI解答要点"
+                lines.append(f"   - {role_label}: {m.content[:320]}")
+
+    out = "\n".join(lines)
+    return out[:max_chars] if out else ""
+
+
+def _build_global_library_memory(db: Session, user_question: str) -> str:
+    """Build comprehensive global knowledge memory across all papers, folders, notes, highlights, and QA histories."""
+    folders = db.query(Folder).order_by(Folder.sort_order.asc()).all()
+    folder_name_map = {f.id: f.name for f in folders}
+
+    papers = db.query(Paper).order_by(Paper.updated_at.desc()).all()
+    all_highlights = db.query(Highlight).order_by(Highlight.created_at.asc()).all()
+    all_anchors = db.query(QAAnchor).order_by(QAAnchor.created_at.asc()).all()
+    all_threads = db.query(ChatThread).filter(ChatThread.scope == "paper").all()
+
+    hl_by_paper: dict[str, list[Highlight]] = {}
+    for h in all_highlights:
+        hl_by_paper.setdefault(h.paper_id, []).append(h)
+
+    anc_by_paper: dict[str, list[QAAnchor]] = {}
+    for a in all_anchors:
+        anc_by_paper.setdefault(a.paper_id, []).append(a)
+
+    paper_thread_by_paper = {t.paper_id: t for t in all_threads if t.paper_id}
+
+    sections: list[str] = []
+    if folders:
+        sections.append("【用户文献库文件夹分类】: " + "、".join(f.name for f in folders))
+
+    if not papers:
+        sections.append("【文献库状态】: 当前文献库为空，尚未导入任何论文。")
+        return "\n\n".join(sections)
+
+    sections.append(f"【用户个人文献库全览（共 {len(papers)} 篇文献）】:")
+    q_low = (user_question or "").lower()
+    matched_deep_papers: list[Paper] = []
+
+    for idx, p in enumerate(papers, start=1):
+        fname = folder_name_map.get(p.folder_id, "未分类") if p.folder_id else "未分类"
+        title_display = f"{p.title_zh} ({p.title})" if p.title_zh else p.title
+        tiers = ", ".join(p.journal_tier or []) or "无分区标签"
+        p_lines = [
+            f"### 文献 {idx}: 《{title_display}》",
+            f"- 文件夹: {fname} | 年份: {p.year or '未知'} | 期刊/会议: {p.venue or '未知'} | 分区: {tiers} | 阅读进度: {round(p.reading_progress or 0)}%",
+        ]
+        if p.authors:
+            p_lines.append(f"- 作者: {', '.join(p.authors[:6])}")
+        abs_txt = (p.abstract_zh or p.abstract_en or "").strip()
+        if abs_txt:
+            p_lines.append(f"- 摘要: {abs_txt[:420]}")
+
+        # Highlights & Notes for this paper
+        hls = hl_by_paper.get(p.id, [])
+        if hls:
+            p_lines.append(f"- 读者高亮与批注 ({len(hls)} 条):")
+            for h in hls[:25]:
+                note_s = f" → 【批注】: {h.note}" if h.note else ""
+                p_lines.append(f"  * [{h.color}] 「{h.selected_text[:180]}」{note_s}")
+
+        # Selection QA anchors for this paper
+        ancs = anc_by_paper.get(p.id, [])
+        if ancs:
+            p_lines.append(f"- 读者划词 AI 提问记录 ({len(ancs)} 处，反映读者重点疑惑或关注点):")
+            for a in ancs[:18]:
+                msgs = (
+                    db.query(ChatMessage)
+                    .filter(ChatMessage.thread_id == a.thread_id)
+                    .order_by(ChatMessage.created_at.asc())
+                    .all()
+                )
+                user_qs = [m.content[:180] for m in msgs if m.role == "user"]
+                ai_ans = [m.content[:220] for m in msgs if m.role == "assistant"]
+                q_str = " / ".join(user_qs) if user_qs else "请求 AI 深度解释"
+                a_str = ai_ans[-1] if ai_ans else ""
+                p_lines.append(f"  * 划词: 「{a.selected_text[:150]}」 | 问: {q_str} | 答要: {a_str}")
+
+        # Paper-level chat questions
+        pt = paper_thread_by_paper.get(p.id)
+        if pt:
+            p_msgs = (
+                db.query(ChatMessage)
+                .filter(ChatMessage.thread_id == pt.id, ChatMessage.role == "user")
+                .order_by(ChatMessage.created_at.desc())
+                .limit(6)
+                .all()
+            )
+            if p_msgs:
+                p_lines.append(
+                    "- 读者在该文献的全文伴读中曾提问: "
+                    + "；".join(m.content[:120] for m in reversed(p_msgs))
+                )
+
+        sections.append("\n".join(p_lines))
+
+        # Check if user's question specifically references this paper so we can include deeper body text
+        title_tokens = [
+            t.lower()
+            for t in [p.title_zh or "", p.title or "", p.venue or ""]
+            if t and len(t) >= 3
+        ]
+        if any(
+            tok[:8] in q_low or any(w in q_low for w in tok.split() if len(w) >= 4)
+            for tok in title_tokens
+        ):
+            matched_deep_papers.append(p)
+
+    # Inject deep body excerpts for up to 2 specifically referenced papers
+    if matched_deep_papers:
+        sections.append("\n【与当前提问高度相关文献的正文节选】:")
+        for mp in matched_deep_papers[:2]:
+            blks = (
+                db.query(PaperBlock)
+                .filter(PaperBlock.paper_id == mp.id)
+                .order_by(PaperBlock.order_index.asc())
+                .limit(35)
+                .all()
+            )
+            sections.append(_build_paper_context(mp, blks, max_chars=4500))
+
+    full_ctx = "\n\n".join(sections)
+    return full_ctx[:22000]
+
+
 @router.post("/threads/{thread_id}/messages")
 async def post_thread_message(
     thread_id: str,
@@ -547,7 +712,10 @@ async def post_thread_message(
                 .order_by(PaperBlock.order_index.asc())
                 .all()
             )
-            context_sections.append(_build_paper_context(paper, blks, max_chars=14000))
+            context_sections.append(_build_paper_context(paper, blks, max_chars=13000))
+            ann_mem = _build_paper_annotations_memory(db, paper.id, max_chars=4500)
+            if ann_mem:
+                context_sections.append(ann_mem)
             if thread.scope == "anchor" and thread.anchor:
                 anchor = thread.anchor
                 blk = db.query(PaperBlock).filter(PaperBlock.id == anchor.block_id).first()
@@ -557,8 +725,9 @@ async def post_thread_message(
                 )
 
     system_prompt = (
-        "你是一个严谨、深入的 AI 学术阅读助手。请基于提供的论文内容回答读者问题，条理清晰、直指本质，"
-        "引用具体章节或图表依据（如 Fig. 1），数学公式请使用标准 LaTeX (`$...$` / `$$...$$`)。"
+        "你是一个严谨、深入的 AI 学术阅读助手。你同时掌握这篇论文的完整内容，以及读者在本篇论文中做过的所有高亮、批注和划词 AI 问答历史。"
+        "请基于这些真实资料回答读者问题（包括梳理批注待办、总结读者不懂的难点、深化论文理解等），条理清晰、直指本质，"
+        "引用具体章节、图表依据或读者的原批注，数学公式请使用标准 LaTeX (`$...$` / `$$...$$`)。"
     )
 
     llm_messages: list[dict[str, str]] = [
@@ -696,3 +865,130 @@ async def create_multi_paper_synthesis(
         "title": thread.title,
         "messages": [_msg_to_out(user_msg), _msg_to_out(ai_msg)],
     }
+
+
+def _get_or_create_global_thread(db: Session) -> ChatThread:
+    thread = db.query(ChatThread).filter(ChatThread.scope == "global").first()
+    if not thread:
+        thread = ChatThread(
+            id=str(uuid.uuid4()),
+            paper_id=None,
+            scope="global",
+            title="全局文献库 AI 助手",
+        )
+        db.add(thread)
+        db.commit()
+        db.refresh(thread)
+    return thread
+
+
+@router.get("/global-chat")
+def get_global_chat(
+    _user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    thread = _get_or_create_global_thread(db)
+    msgs = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.thread_id == thread.id)
+        .order_by(ChatMessage.created_at.asc())
+        .all()
+    )
+    paper_count = db.query(Paper).count()
+    highlight_count = db.query(Highlight).count()
+    note_count = (
+        db.query(Highlight)
+        .filter(Highlight.note.isnot(None), Highlight.note != "")
+        .count()
+    )
+    anchor_count = db.query(QAAnchor).count()
+    return {
+        "thread_id": thread.id,
+        "messages": [_msg_to_out(m) for m in msgs],
+        "stats": {
+            "paper_count": paper_count,
+            "highlight_count": highlight_count,
+            "note_count": note_count,
+            "anchor_count": anchor_count,
+        },
+    }
+
+
+@router.post("/global-chat/messages")
+async def post_global_chat_message(
+    payload: ThreadMessageCreateRequest,
+    _user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    thread = _get_or_create_global_thread(db)
+    cfg = resolve_module_config(db, "chat")
+    thinking_level = payload.thinking_level or cfg.thinking_level
+
+    history = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.thread_id == thread.id)
+        .order_by(ChatMessage.created_at.asc())
+        .all()
+    )
+    global_memory = _build_global_library_memory(db, payload.question)
+
+    system_prompt = (
+        "你是用户的个人全局学术知识库 AI 助手（H文献大师全局大脑）。"
+        "你可以读取用户整个文献库中的所有论文信息、阅读进度、所有高亮与亲手写的批注、以及用户在各篇论文中划词发起过的所有 AI 提问与解答历史。"
+        "你既能精准回答关于用户文献库、批注待办、阅读盲区/不懂的地方、跨文献对比与知识关联的问题，也能作为通用学术助手解答任何科研问题。"
+        "回答时请清晰标明引用的具体文献名称与用户的原批注/提问，严禁凭空编造用户没写过的批注，数学公式请使用标准 LaTeX (`$...$` / `$$...$$`)。"
+    )
+
+    llm_messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": "以下是我个人文献库的实时全量知识与阅读记忆：\n\n" + global_memory},
+        {"role": "assistant", "content": "已同步查阅您的全部文献、高亮批注及历史提问记录，请问有什么可以帮您？"},
+    ]
+    for msg in history[-12:]:
+        llm_messages.append({"role": msg.role, "content": msg.content})
+    llm_messages.append({"role": "user", "content": payload.question.strip()})
+
+    try:
+        answer_text, thinking_text = await call_chat_completion(
+            cfg,
+            llm_messages,
+            temperature=0.3,
+            max_tokens=4096,
+            thinking_level=thinking_level,
+            timeout_sec=150.0,
+        )
+    except LLMServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    user_msg = ChatMessage(
+        id=str(uuid.uuid4()),
+        thread_id=thread.id,
+        role="user",
+        content=payload.question.strip(),
+    )
+    ai_msg = ChatMessage(
+        id=str(uuid.uuid4()),
+        thread_id=thread.id,
+        role="assistant",
+        content=answer_text,
+        thinking_content=thinking_text,
+        thinking_level=thinking_level,
+    )
+    db.add_all([user_msg, ai_msg])
+    db.commit()
+
+    return {
+        "user_message": _msg_to_out(user_msg),
+        "assistant_message": _msg_to_out(ai_msg),
+    }
+
+
+@router.delete("/global-chat/messages")
+def clear_global_chat_messages(
+    _user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    thread = _get_or_create_global_thread(db)
+    db.query(ChatMessage).filter(ChatMessage.thread_id == thread.id).delete()
+    db.commit()
+    return {"ok": True}
