@@ -622,8 +622,8 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="w-full max-w-[1200px] mx-auto px-5 md:px-10 py-6 md:py-10 space-y-8">
           {/* Top Toolbar */}
-          <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-[#1c1c1c]/10 pb-6">
-            <div className="flex items-start gap-3">
+          <header className="flex flex-col xl:flex-row xl:items-end justify-between gap-5 border-b border-[#1c1c1c]/10 pb-6">
+            <div className="flex items-start gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setMobileSidebarOpen(true)}
@@ -632,20 +632,20 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
               >
                 <Menu className="w-4 h-4" />
               </button>
-              <div>
+              <div className="shrink-0">
                 <div className="section-label mb-2">Research Library</div>
-                <div className="flex items-baseline gap-4">
-                  <h1 className="font-serif text-[32px] md:text-[42px] leading-[1.1] tracking-[-0.02em] font-normal">
+                <div className="flex items-baseline gap-3.5 whitespace-nowrap">
+                  <h1 className="font-serif text-[30px] md:text-[36px] leading-[1.08] tracking-[-0.02em] font-normal whitespace-nowrap">
                     文献库
                   </h1>
-                  <span className="text-[12px] uppercase tracking-[0.18em] text-[#6b7280]">
+                  <span className="text-[12px] tracking-[0.14em] text-[#6b7280] whitespace-nowrap">
                     共 {papers.length} 篇文章
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => {
@@ -733,15 +733,6 @@ export default function LibraryView({ username, onLogout }: LibraryViewProps) {
                   <ListIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setGlobalChatOpen(true)}
-                className="btn-editorial-outline h-9 py-0 px-3.5 text-[12px] tracking-[0.14em]"
-              >
-                <Bot className="w-3.5 h-3.5 text-[#816d70]" />
-                全局 AI
-              </button>
 
               <button
                 type="button"
