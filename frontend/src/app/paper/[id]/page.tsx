@@ -161,7 +161,7 @@ export default function PaperReaderPage() {
   const synthDialogRef = useEditorialDialog(synthOpen, () => setSynthOpen(false));
 
   const streamScrollRef = useRef<HTMLDivElement | null>(null);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [flashBlockId, setFlashBlockId] = useState<string | null>(null);
   const hasRestoredPosRef = useRef<boolean>(false);
   const latestPosRef = useRef<{
@@ -356,10 +356,16 @@ export default function PaperReaderPage() {
     };
   }, [viewMode, data?.blocks, flushReadingProgress]);
 
-  // Scroll chat to bottom when messages update
+  // Scroll ONLY the inner chat scroll container (never use scrollIntoView, which scrolls outer <aside> / window)
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [data?.paper_messages, data?.qa_anchors, activeAnchorId]);
+    if (activeTab !== "chat") return;
+    const el = chatScrollContainerRef.current;
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    }
+  }, [data?.paper_messages, data?.qa_anchors, activeAnchorId, activeTab]);
 
   // Dismiss selection toolbar, translation card, and citation popover when clicking blank area
   useEffect(() => {
@@ -844,9 +850,9 @@ export default function PaperReaderPage() {
   const { paper } = data;
 
   const sidebarPanel = (
-    <div className="flex flex-col h-full bg-[#f9f8f6]">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden bg-[#f9f8f6]">
       {/* 4 Tabs Header */}
-      <div className="grid grid-cols-4 border-b border-[#1c1c1c]/15 text-[11px] uppercase tracking-[0.12em]">
+      <div className="shrink-0 grid grid-cols-4 border-b border-[#1c1c1c]/15 text-[11px] uppercase tracking-[0.12em]">
         {[
           { id: "chat", label: "AI 问答", icon: Bot },
           { id: "outline", label: "目录", icon: ListTree },
@@ -874,7 +880,10 @@ export default function PaperReaderPage() {
       </div>
 
       {/* Tab Body (generous bottom padding so iPad/tablet last item is never clipped) */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]">
+      <div
+        ref={chatScrollContainerRef}
+        className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]"
+      >
         {activeTab === "chat" && (
           <div className="flex flex-col h-full justify-between gap-4">
             <div className="space-y-4">
@@ -1014,7 +1023,6 @@ export default function PaperReaderPage() {
                     {chatError}
                   </p>
                 )}
-                <div ref={chatEndRef} />
               </div>
             </div>
           </div>
@@ -1216,7 +1224,7 @@ export default function PaperReaderPage() {
 
       {/* Chat Composer Footer (shown on Chat Tab) */}
       {activeTab === "chat" && (
-        <div className="px-4 pt-4 pb-[calc(2.75rem+env(safe-area-inset-bottom,0px))] border-t border-[#1c1c1c]/15 bg-[#f9f8f6] space-y-3">
+        <div className="shrink-0 px-4 pt-4 pb-[calc(2.75rem+env(safe-area-inset-bottom,0px))] border-t border-[#1c1c1c]/15 bg-[#f9f8f6] space-y-3">
           <div className="flex items-center justify-between text-[11px] text-[#6b7280]">
             <span>{activeAnchor ? "向当前锚点继续追问" : "向全文 AI 提问"}</span>
             <select

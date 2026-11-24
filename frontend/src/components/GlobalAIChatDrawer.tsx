@@ -49,7 +49,7 @@ export default function GlobalAIChatDrawer({ open, onClose }: GlobalAIChatDrawer
   const [error, setError] = useState<string | null>(null);
   const [thinkingLevel, setThinkingLevel] = useState<"high" | "medium" | "low">("high");
 
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const loadGlobalChat = useCallback(async () => {
     setLoading(true);
@@ -76,8 +76,11 @@ export default function GlobalAIChatDrawer({ open, onClose }: GlobalAIChatDrawer
   }, [open, loadGlobalChat]);
 
   useEffect(() => {
-    if (open) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (open && scrollContainerRef.current) {
+      const el = scrollContainerRef.current;
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
     }
   }, [messages, open]);
 
@@ -166,7 +169,10 @@ export default function GlobalAIChatDrawer({ open, onClose }: GlobalAIChatDrawer
         </div>
 
         {/* Messages Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-4">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto px-5 py-5 space-y-4"
+        >
           {loading ? (
             <div className="py-12 text-center text-[12px] text-[#6b7280] uppercase tracking-[0.18em]">
               正在同步全库阅读记忆...
@@ -231,11 +237,10 @@ export default function GlobalAIChatDrawer({ open, onClose }: GlobalAIChatDrawer
               {error}
             </p>
           )}
-          <div ref={bottomRef} />
         </div>
 
         {/* Composer Footer */}
-        <div className="px-5 pt-4 pb-[calc(2.5rem+env(safe-area-inset-bottom,0px))] border-t border-[#1c1c1c]/15 bg-[#f9f8f6] space-y-3">
+        <div className="shrink-0 px-5 pt-4 pb-[calc(2.5rem+env(safe-area-inset-bottom,0px))] border-t border-[#1c1c1c]/15 bg-[#f9f8f6] space-y-3">
           <div className="flex items-center justify-between text-[11px] text-[#6b7280]">
             <span>跨文献检索批注、盲区或提出通用科研问题</span>
             <select
